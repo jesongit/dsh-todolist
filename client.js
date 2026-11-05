@@ -359,15 +359,17 @@ window.__ModuleLoader__.load({
 .dtl-note[data-pinned="1"][data-color="pink"]{background:color-mix(in srgb,var(--dtl-err) 19%,var(--dtl-bg))}
 .dtl-note .dtl-note-ta{background:none;border:none;color:var(--dtl-fg);font:inherit;resize:none;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;width:100%}
 .dtl-note-body{background:none;border:none;color:var(--dtl-fg);font:inherit;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;white-space:pre-wrap;word-break:break-word;cursor:text}
-.dtl-pin{position:absolute;top:0;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
+.dtl-pin{position:absolute;top:-2px;left:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
 .dtl-note:hover .dtl-pin{opacity:.6}
 .dtl-pin:hover{opacity:1;color:var(--dtl-brand);background:transparent}
 .dtl-pin[data-on="1"]{opacity:1;color:var(--dtl-brand)}
-.dtl-note-badge{position:absolute;top:2px;left:2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:color-mix(in srgb,#6b7280 18%,transparent);color:var(--dtl-fg2);pointer-events:none;opacity:0;transition:opacity .15s ease}
-.dtl-note:hover .dtl-note-badge{opacity:.9}
-.dtl-note-copy{position:absolute;right:2px;bottom:2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--dtl-fg2);padding:3px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
+.dtl-note-del{position:absolute;top:-2px;right:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
+.dtl-note:hover .dtl-note-del{opacity:.7}
+.dtl-note-del:hover{opacity:1;color:var(--dtl-err);background:transparent}
+.dtl-note-del[data-danger="1"]{opacity:1;color:var(--dtl-err)}
+.dtl-note-copy{position:absolute;right:-2px;bottom:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--dtl-fg2);padding:3px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
 .dtl-note:hover .dtl-note-copy{opacity:.7}
-.dtl-note-copy:hover{opacity:1;color:var(--dtl-brand);background:rgba(127,127,127,.12)}
+.dtl-note-copy:hover{opacity:1;color:var(--dtl-brand);background:transparent}
 .dtl-ctxmenu{position:fixed;z-index:1000;min-width:150px;box-sizing:border-box;background:var(--dtl-bg);color:var(--dtl-fg);border:1px solid var(--dtl-border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.20);padding:8px;display:flex;flex-direction:column;gap:8px;font-weight:400;font-size:13px}
 .dtl-ctx-title{font-size:11px;color:var(--dtl-fg2);padding:0 2px}
 .dtl-ctx-colors{display:flex;gap:8px;padding:0 2px}
@@ -738,14 +740,21 @@ window.__ModuleLoader__.load({
       const [menu, setMenu] = React.useState(null) // {x, y}
       const [copied, setCopied] = React.useState(null)
       const [editing, setEditing] = React.useState(false)
+      const [confirmDel, setConfirmDel] = React.useState(false)
       const colorLabel = { yellow: '黄', green: '绿', blue: '蓝', pink: '粉' }
       const close = () => setMenu(null)
+      // Delete needs two clicks (like todo lists); auto-cancels after a moment.
+      React.useEffect(() => {
+        if (!confirmDel) return () => {}
+        const t = setTimeout(() => setConfirmDel(false), 3000)
+        return () => clearTimeout(t)
+      }, [confirmDel])
       const taRef = React.useRef(null)
       const segRef = React.useRef(null)
       const clickTimer = React.useRef(null)
       // A leading backtick opts the note out of link/secret detection ("raw"
       // mode). The backtick itself is hidden in the read view, shown only while
-      // editing. We flag it with a small code badge at the top-left.
+      // editing.
       const raw = /^\s*`/.test(note.text || '')
       const segs = React.useMemo(() => {
         if (raw) { const body = String(note.text || '').replace(/^\s*`/, ''); return [{ text: body || ' ' }] }
@@ -836,16 +845,9 @@ window.__ModuleLoader__.load({
         if (t !== note.text) void call('note.update', { workspaceId, noteId: note.id, text: t }).then(onChange).catch((err) => onChange(null, err))
       }
       return h('div', {
-        className: 'dtl-note', 'data-color': note.color, 'data-raw': raw ? 1 : 0, 'data-pinned': pinned ? 1 : 0, title: '点击编辑，右键：复制 / 颜色 / 删除',
+        className: 'dtl-note', 'data-color': note.color, 'data-raw': raw ? 1 : 0, 'data-pinned': pinned ? 1 : 0, title: '点击编辑，右键可改颜色',
         onContextMenu: (e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) },
       },
-        raw
-          ? h('span', { className: 'dtl-note-badge', 'aria-label': '原始文本模式', title: '原始文本模式：不作链接/密钥识别' },
-              h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-                h('path', { d: 'M9 6l-4 6 4 6M15 6l4 6-4 6' }),
-              ),
-            )
-          : null,
         h('button', {
           className: 'dtl-pin', type: 'button', 'data-on': pinned ? 1 : 0,
           title: pinned ? '取消置顶' : '置顶便签', 'aria-label': pinned ? '取消置顶' : '置顶便签', 'aria-pressed': pinned ? 'true' : 'false',
@@ -853,6 +855,11 @@ window.__ModuleLoader__.load({
         }, h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true },
           h('path', { d: 'M16 9V4h1V2H7v2h1v5c0 1.66-1.34 3-3 3v2h5.97v7.01l1 1 1-1V14H19v-2c-1.66 0-3-1.34-3-3z' }),
         )),
+        h('button', {
+          className: 'dtl-note-del', type: 'button', 'data-danger': confirmDel ? 1 : 0,
+          title: confirmDel ? '再次点击确认删除便签' : '删除便签', 'aria-label': confirmDel ? '确认删除便签' : '删除便签',
+          onClick: (e) => { e.stopPropagation(); if (confirmDel) remove(); else setConfirmDel(true) },
+        }, h(Icon, { d: confirmDel ? ICON.check : ICON.x, size: 14 })),
         h('button', {
           className: 'dtl-note-copy', type: 'button', title: '复制全部内容', 'aria-label': '复制全部内容',
           onClick: (e) => { e.stopPropagation(); copyNoteAll() },
@@ -872,8 +879,6 @@ window.__ModuleLoader__.load({
             },
               h('div', { className: 'dtl-ctx-title' }, '便签颜色'),
               h('div', { className: 'dtl-ctx-colors' }, colors.map((c) => h('button', { key: c, className: 'dtl-swatch', 'data-c': c, 'data-on': note.color === c ? 1 : 0, title: colorLabel[c] || c, 'aria-label': `设为${colorLabel[c] || c}色`, onClick: () => setColor(c) }))),
-              h('div', { className: 'dtl-ctx-sep' }),
-              h('button', { className: 'dtl-ctx-del', onClick: remove }, '删除便签'),
             )
           : null,
       )
