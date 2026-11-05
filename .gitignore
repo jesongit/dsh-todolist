@@ -1,0 +1,9 @@
+node_modules/
+data.json
+data.json.bak
+.tmp*
+.shot*.png
+.crop*.png
+.side.png
+*.log
+.DS_Store

@@ -1,0 +1,47 @@
+{
+  "name": "@local/dsh-todolist",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Workspace-scoped todo lists and sticky notes for DeepSeek Harness: a floating panel plus an aggregate board grouped by workspace.",
+  "license": "MIT",
+  "author": "jesongit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jesongit/dsh-todolist.git"
+  },
+  "homepage": "https://github.com/jesongit/dsh-todolist#readme",
+  "bugs": {
+    "url": "https://github.com/jesongit/dsh-todolist/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "todo",
+    "todolist",
+    "sticky-notes",
+    "workspace"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
