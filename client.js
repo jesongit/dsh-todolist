@@ -353,12 +353,21 @@ window.__ModuleLoader__.load({
 .dtl-note[data-color="green"]{background:color-mix(in srgb,var(--dtl-ok) 12%,var(--dtl-bg))}
 .dtl-note[data-color="blue"]{background:color-mix(in srgb,var(--dtl-brand) 12%,var(--dtl-bg))}
 .dtl-note[data-color="pink"]{background:color-mix(in srgb,var(--dtl-err) 10%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="yellow"]{background:color-mix(in srgb,var(--dtl-warn) 21%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="green"]{background:color-mix(in srgb,var(--dtl-ok) 21%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="blue"]{background:color-mix(in srgb,var(--dtl-brand) 21%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="pink"]{background:color-mix(in srgb,var(--dtl-err) 19%,var(--dtl-bg))}
 .dtl-note .dtl-note-ta{background:none;border:none;color:var(--dtl-fg);font:inherit;resize:none;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;width:100%}
 .dtl-note-body{background:none;border:none;color:var(--dtl-fg);font:inherit;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;white-space:pre-wrap;word-break:break-word;cursor:text}
 .dtl-pin{position:absolute;top:0;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
 .dtl-note:hover .dtl-pin{opacity:.6}
 .dtl-pin:hover{opacity:1;color:var(--dtl-brand);background:transparent}
 .dtl-pin[data-on="1"]{opacity:1;color:var(--dtl-brand)}
+.dtl-note-badge{position:absolute;top:2px;left:2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:color-mix(in srgb,#6b7280 18%,transparent);color:var(--dtl-fg2);pointer-events:none;opacity:0;transition:opacity .15s ease}
+.dtl-note:hover .dtl-note-badge{opacity:.9}
+.dtl-note-copy{position:absolute;right:2px;bottom:2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--dtl-fg2);padding:3px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
+.dtl-note:hover .dtl-note-copy{opacity:.7}
+.dtl-note-copy:hover{opacity:1;color:var(--dtl-brand);background:rgba(127,127,127,.12)}
 .dtl-ctxmenu{position:fixed;z-index:1000;min-width:150px;box-sizing:border-box;background:var(--dtl-bg);color:var(--dtl-fg);border:1px solid var(--dtl-border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.20);padding:8px;display:flex;flex-direction:column;gap:8px;font-weight:400;font-size:13px}
 .dtl-ctx-title{font-size:11px;color:var(--dtl-fg2);padding:0 2px}
 .dtl-ctx-colors{display:flex;gap:8px;padding:0 2px}
@@ -645,7 +654,9 @@ window.__ModuleLoader__.load({
     function App({ ctx, workspaceId, workspaceTitle, call, compact, drag, onCollapse }) {
       const state = useSnapshot(ctx, workspaceId, call)
       const { snap, reload } = state
-      const [tab, setTab] = React.useState('todo')
+      const [tab, setTab] = React.useState(() => {
+        try { return localStorage.getItem('dsh-todolist-tab') === 'notes' ? 'notes' : 'todo' } catch { return 'todo' }
+      })
       const [creating, setCreating] = React.useState(false)
       const [newTitle, setNewTitle] = React.useState('')
       const onchange = (v) => { if (v) reload() }
@@ -659,9 +670,12 @@ window.__ModuleLoader__.load({
         void call('list.create', { workspaceId, title: t }).then(onchange).catch((err) => onchange(null, err))
       }
       const addNote = () => {
-        void call('note.add', { workspaceId, text: '' }).then(onchange).catch((err) => onchange(null, err))
+        const pal = (snap && snap.colors) || ['yellow', 'green', 'blue', 'pink']
+        const n = (snap && snap.notes && snap.notes.length) || 0
+        const color = pal[n % pal.length]
+        void call('note.add', { workspaceId, text: '', color }).then(onchange).catch((err) => onchange(null, err))
       }
-      const switchTab = (next) => { setTab(next); setCreating(false); setNewTitle('') }
+      const switchTab = (next) => { setTab(next); try { localStorage.setItem('dsh-todolist-tab', next) } catch { /* ignore */ } ; setCreating(false); setNewTitle('') }
 
       // sidecar: aggregate counts for the sidebar icon
       if (typeof window !== 'undefined') {
@@ -729,7 +743,14 @@ window.__ModuleLoader__.load({
       const taRef = React.useRef(null)
       const segRef = React.useRef(null)
       const clickTimer = React.useRef(null)
-      const segs = React.useMemo(() => buildSegments(note.text), [note.text])
+      // A leading backtick opts the note out of link/secret detection ("raw"
+      // mode). The backtick itself is hidden in the read view, shown only while
+      // editing. We flag it with a small code badge at the top-left.
+      const raw = /^\s*`/.test(note.text || '')
+      const segs = React.useMemo(() => {
+        if (raw) { const body = String(note.text || '').replace(/^\s*`/, ''); return [{ text: body || ' ' }] }
+        return buildSegments(note.text)
+      }, [note.text, raw])
       // Auto-grow with content; no scrollbar until it hits the cap. We toggle
       // overflow off while the content fits to avoid a phantom scrollbar from
       // sub-pixel rounding, and re-measure when the width changes.
@@ -746,7 +767,7 @@ window.__ModuleLoader__.load({
           el.style.overflowY = 'hidden'
         }
       }, [])
-      React.useEffect(() => {
+      React.useLayoutEffect(() => {
         autosize()
         const el = taRef.current
         if (!el || typeof ResizeObserver !== 'function') return () => {}
@@ -760,7 +781,7 @@ window.__ModuleLoader__.load({
         })
         ro.observe(el)
         return () => { ro.disconnect(); cancelAnimationFrame(raf) }
-      }, [autosize])
+      }, [autosize, editing])
       React.useEffect(() => {
         if (!menu) return () => {}
         const onDown = (e) => { if (!(e.target && e.target.closest && e.target.closest('[data-dtl-ctx]'))) close() }
@@ -789,7 +810,12 @@ window.__ModuleLoader__.load({
         if (clickTimer.current) { window.clearTimeout(clickTimer.current); clickTimer.current = null }
         openExternal(t.value)
       }
-      const copyAll = () => { close(); copyText(note.text).catch(() => {}) }
+      // Copy the whole note; a leading backtick (raw mode) is stripped.
+      const copyNoteAll = () => {
+        const src = editing && taRef.current ? taRef.current.value : (note.text || '')
+        const out = /^\s*`/.test(src) ? String(src).replace(/^\s*`/, '') : src
+        copyText(out).catch(() => {})
+      }
       const setColor = (c) => { close(); if (note.color !== c) void call('note.setColor', { workspaceId, noteId: note.id, color: c }).then(onChange).catch((err) => onChange(null, err)) }
       const remove = () => { close(); void call('note.remove', { workspaceId, noteId: note.id }).then(onChange).catch((err) => onChange(null, err)) }
       // Render inline segments: plain text runs + clickable chips (values shown).
@@ -810,15 +836,30 @@ window.__ModuleLoader__.load({
         if (t !== note.text) void call('note.update', { workspaceId, noteId: note.id, text: t }).then(onChange).catch((err) => onChange(null, err))
       }
       return h('div', {
-        className: 'dtl-note', 'data-color': note.color, title: '点击编辑，右键：复制 / 颜色 / 删除',
+        className: 'dtl-note', 'data-color': note.color, 'data-raw': raw ? 1 : 0, 'data-pinned': pinned ? 1 : 0, title: '点击编辑，右键：复制 / 颜色 / 删除',
         onContextMenu: (e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) },
       },
+        raw
+          ? h('span', { className: 'dtl-note-badge', 'aria-label': '原始文本模式', title: '原始文本模式：不作链接/密钥识别' },
+              h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+                h('path', { d: 'M9 6l-4 6 4 6M15 6l4 6-4 6' }),
+              ),
+            )
+          : null,
         h('button', {
           className: 'dtl-pin', type: 'button', 'data-on': pinned ? 1 : 0,
           title: pinned ? '取消置顶' : '置顶便签', 'aria-label': pinned ? '取消置顶' : '置顶便签', 'aria-pressed': pinned ? 'true' : 'false',
           onClick: (e) => { e.stopPropagation(); if (onTogglePin) onTogglePin() },
         }, h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true },
           h('path', { d: 'M16 9V4h1V2H7v2h1v5c0 1.66-1.34 3-3 3v2h5.97v7.01l1 1 1-1V14H19v-2c-1.66 0-3-1.34-3-3z' }),
+        )),
+        h('button', {
+          className: 'dtl-note-copy', type: 'button', title: '复制全部内容', 'aria-label': '复制全部内容',
+          onClick: (e) => { e.stopPropagation(); copyNoteAll() },
+          onDoubleClick: (e) => e.stopPropagation(),
+        }, h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+          h('rect', { x: 9, y: 9, width: 11, height: 11, rx: 2 }),
+          h('path', { d: 'M5 15V5a2 2 0 0 1 2-2h8' }),
         )),
         editing
           ? h('textarea', { ref: taRef, rows: 1, defaultValue: note.text, autoFocus: true, 'aria-label': '便签内容', className: 'dtl-note-ta', onInput: autosize, onBlur: saveEdit, onKeyDown: (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit() } })
@@ -829,8 +870,6 @@ window.__ModuleLoader__.load({
               style: { left: `${Math.max(8, Math.min(menu.x, (window.innerWidth || 9999) - 190))}px`, top: `${Math.max(8, Math.min(menu.y, (window.innerHeight || 9999) - 160))}px` },
               onContextMenu: (e) => e.preventDefault(),
             },
-              h('button', { className: 'dtl-ctx-item', onClick: copyAll }, '复制全部内容'),
-              h('div', { className: 'dtl-ctx-sep' }),
               h('div', { className: 'dtl-ctx-title' }, '便签颜色'),
               h('div', { className: 'dtl-ctx-colors' }, colors.map((c) => h('button', { key: c, className: 'dtl-swatch', 'data-c': c, 'data-on': note.color === c ? 1 : 0, title: colorLabel[c] || c, 'aria-label': `设为${colorLabel[c] || c}色`, onClick: () => setColor(c) }))),
               h('div', { className: 'dtl-ctx-sep' }),
@@ -888,7 +927,8 @@ window.__ModuleLoader__.load({
         void call('list.create', { workspaceId: group.workspaceId, title: t }).then(onchange).catch((err) => onchange(null, err))
       }
       const addNote = () => {
-        void call('note.add', { workspaceId: group.workspaceId, text: '' }).then(onchange).catch((err) => onchange(null, err))
+        const color = colors[notes.length % colors.length]
+        void call('note.add', { workspaceId: group.workspaceId, text: '', color }).then(onchange).catch((err) => onchange(null, err))
       }
       return h('section', {
         className: 'dtl-wscard', 'data-ws': group.workspaceId,

@@ -17,15 +17,15 @@ Workspace-scoped todo lists and sticky notes for **DeepSeek Harness (DSH)** — 
 在 DSH「设置 → 插件」的组合包安装入口粘贴：
 
 ```text
-github:jesongit/dsh-todolist#v1.0.0
+github:jesongit/dsh-todolist#v1.0.1
 ```
 
-或从 [GitHub Releases](https://github.com/jesongit/dsh-todolist/releases/tag/v1.0.0) 下载发行包后选择本地包安装。
+或从 [GitHub Releases](https://github.com/jesongit/dsh-todolist/releases/tag/v1.0.1) 下载发行包后选择本地包安装。
 
 ### CLI（未独立验证）
 
 ```sh
-dsh plugin --profile <your-profile> add github:jesongit/dsh-todolist#v1.0.0
+dsh plugin --profile <your-profile> add github:jesongit/dsh-todolist#v1.0.1
 ```
 
 ## 兼容性 / Compatibility

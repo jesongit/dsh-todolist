@@ -333,7 +333,16 @@ export function apply(ctx, config = {}) {
         const ws = requireWorkspace(payload)
         const text = requireText(payload, 'text', 20000)
         const picked = payload && payload.color
-        const color = colors.includes(picked) ? picked : colors[0]
+        // Default color cycles through the configured palette so new notes vary
+        // instead of always being the same color.
+        let color
+        if (colors.includes(picked)) {
+          color = picked
+        } else {
+          const prefix = `${ws}/`
+          const count = Object.keys(store.data.notes).filter((k) => k.startsWith(prefix)).length
+          color = colors[count % colors.length]
+        }
         store.data.notes[`${ws}/${uid()}`] = { id: uid(), text, color, createdAt: Date.now(), updatedAt: Date.now() }
         await store.flush()
         return ok(snapshotFor(ws))
