@@ -321,7 +321,14 @@ window.__ModuleLoader__.load({
 .dtl-listhead[data-c="2"]{background:color-mix(in srgb,#ec4899 18%,var(--dtl-bg2))}
 .dtl-listhead[data-c="3"]{background:color-mix(in srgb,#0891b2 20%,var(--dtl-bg2))}
 .dtl-listhead[data-c="4"]{background:color-mix(in srgb,#ef4444 16%,var(--dtl-bg2))}
-.dtl-listhead input{flex:1;background:none;border:none;color:var(--dtl-fg);font:inherit;font-weight:600;outline:none}
+.dtl-listtitle{flex:1;min-width:0}
+.dtl-listtitle-btn{display:block;max-width:100%;padding:0;background:none;border:none;color:inherit;font:inherit;text-align:left;overflow-wrap:anywhere;cursor:pointer}
+.dtl-listtitle-btn:focus-visible{outline:2px solid var(--dtl-brand);outline-offset:2px;border-radius:2px}
+.dtl-listhead .dtl-listtitle-input{width:100%;min-width:0;box-sizing:border-box;background:var(--dtl-bg);border:1px solid var(--dtl-brand);border-radius:4px;padding:2px 4px;color:var(--dtl-fg);font:inherit;font-weight:600;outline:none;user-select:text}
+.dtl-listtitle-input:focus{outline:2px solid var(--dtl-brand);outline-offset:1px}
+.dtl-listtitle-input[aria-invalid="true"]{border-color:var(--dtl-err)}
+.dtl-listtitle-status{display:block;margin-top:4px;color:var(--dtl-fg2);font-size:11px;font-weight:400;overflow-wrap:anywhere}
+.dtl-listtitle-status[role="alert"]{color:var(--dtl-err)}
 .dtl-count{font-size:11px;color:var(--dtl-fg2);font-weight:400}
 .dtl-items{list-style:none;margin:0;padding:2px 6px 6px;display:flex;flex-direction:column;gap:1px}
 .dtl-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:color-mix(in srgb,#f97316 16%,transparent);transition:background-color .2s ease}
@@ -550,6 +557,84 @@ window.__ModuleLoader__.load({
       }, item.text || ' ')
     }
 
+    function ListTitle({ list, call, workspaceId, onChange, onToggle, expanded }) {
+      const [editing, setEditing] = React.useState(false)
+      const [title, setTitle] = React.useState('')
+      const [saving, setSaving] = React.useState(false)
+      const [error, setError] = React.useState('')
+      const clickTimer = React.useRef(null)
+      const active = React.useRef(false)
+      const pending = React.useRef(false)
+      const inputRef = React.useRef(null)
+      const buttonRef = React.useRef(null)
+      const restoreFocus = React.useRef(false)
+      const clearClick = () => { clearTimeout(clickTimer.current); clickTimer.current = null }
+      React.useEffect(() => () => clearTimeout(clickTimer.current), [])
+      React.useEffect(() => {
+        if (editing) { inputRef.current?.focus(); inputRef.current?.select() }
+        else if (restoreFocus.current) { restoreFocus.current = false; buttonRef.current?.focus() }
+      }, [editing])
+      const start = () => {
+        clearClick()
+        active.current = true
+        setTitle(list.title || '')
+        setError('')
+        setEditing(true)
+      }
+      const save = async (fromKeyboard = false) => {
+        if (!active.current || pending.current) return
+        const next = title.trim()
+        if (!next) { setError('清单名称不能为空，请输入名称。'); return }
+        restoreFocus.current = fromKeyboard
+        if (next === list.title) { active.current = false; setEditing(false); return }
+        pending.current = true
+        setSaving(true)
+        setError('')
+        try {
+          const result = await call('list.rename', { workspaceId, listId: list.id, title: next })
+          active.current = false
+          setEditing(false)
+          onChange?.(result)
+        } catch (err) {
+          setError(`重命名失败：${String(err.message || err)}。请按回车重试。`)
+        } finally {
+          pending.current = false
+          setSaving(false)
+        }
+      }
+      return h('div', { className: 'dtl-listtitle', onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() },
+        editing
+          ? h('input', {
+              ref: inputRef, className: 'dtl-listtitle-input', value: title, maxLength: 500,
+              'aria-label': '清单名称', 'aria-invalid': !!error, 'aria-busy': saving, readOnly: saving,
+              title: '回车保存，Esc 取消，点击其他位置保存',
+              onChange: (e) => { setTitle(e.target.value); setError('') },
+              onBlur: () => { void save() },
+              onKeyDown: (e) => {
+                e.stopPropagation()
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key === 'Enter') { e.preventDefault(); void save(true) }
+                if (e.key === 'Escape' && !pending.current) {
+                  e.preventDefault(); active.current = false; restoreFocus.current = true; setEditing(false); setError('')
+                }
+              },
+            })
+          : h('button', {
+              ref: buttonRef, type: 'button', className: 'dtl-listtitle-btn',
+              title: '单击展开/收起，双击重命名（键盘 F2）', 'aria-expanded': expanded,
+              onClick: (e) => {
+                clearClick()
+                if (e.detail === 0) onToggle()
+                else if (e.detail === 1) clickTimer.current = setTimeout(onToggle, 300)
+              },
+              onDoubleClick: start,
+              onKeyDown: (e) => { if (e.key === 'F2') { e.preventDefault(); e.stopPropagation(); start() } },
+            }, list.title || '未命名清单', h('span', { className: 'dtl-count' }, ` ${list.items.filter((i) => i.done).length}/${list.items.length}`)),
+        editing && error ? h('span', { className: 'dtl-listtitle-status', role: 'alert' }, error) : null,
+        editing && saving ? h('span', { className: 'dtl-listtitle-status', role: 'status' }, '正在保存…') : null,
+      )
+    }
+
     function ListCard({ list, call, workspaceId, onChange, index, pinned, onTogglePin }) {
       const [hi, setHi] = usePersistentToggle('dsh-todolist-list-expanded', list.id, false)
       const [adding, setAdding] = React.useState(false)
@@ -579,7 +664,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'dtl-listhead', 'data-c': colorIdx, 'data-pinned': pinned ? 1 : 0, onClick: () => setHi(!hi) },
-          h('span', { style: { flex: 1 } }, list.title || '未命名清单', h('span', { className: 'dtl-count' }, ` ${list.items.filter((i) => i.done).length}/${list.items.length}`)),
+          h(ListTitle, { key: `${workspaceId}/${list.id}`, list, call, workspaceId, onChange, expanded: hi, onToggle: () => setHi((open) => !open) }),
           h(
             'button',
             {

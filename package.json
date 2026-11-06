@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-todolist",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "Workspace-scoped todo lists and sticky notes for DeepSeek Harness: a floating panel plus an aggregate board grouped by workspace.",
   "license": "MIT",

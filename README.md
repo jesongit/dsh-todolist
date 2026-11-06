@@ -6,7 +6,7 @@ Workspace-scoped todo lists and sticky notes for **DeepSeek Harness (DSH)** — 
 
 - **悬浮面板**：对话区域浮动的「待办 / 便签」小面板，可拖动、可收起（收起后显示待办/完成/便签计数），展开状态按工作区记忆。
 - **聚合看板**：主面板按**工作区**分组展示所有清单与便签，卡片式布局；工作区卡片可拖动排序（顺序本地记忆）。
-- **待办清单**：清单可置顶（浮到最前）、可换色标题、展开状态记忆；事项为单行省略、悬浮展开，圆形勾选带动效，支持一键添加。
+- **待办清单**：清单可置顶（浮到最前）、可换色标题、展开状态记忆；双击标题可重命名（聚焦标题后也可按 F2），回车或点击其他位置保存，Esc 取消；事项为单行省略、悬浮展开，圆形勾选带动效，支持一键添加。
 - **便签**：可置顶（新置顶在最上）、右键改色 / 复制全部 / 删除；内容自动增高；自动识别链接与密钥并以行内 chip 展示——链接单击复制、双击用浏览器打开，密钥/密码/验证码单击复制。
 - **数据按工作区分域**，通过所有者 RPC 与宿主通信。
 
@@ -17,15 +17,15 @@ Workspace-scoped todo lists and sticky notes for **DeepSeek Harness (DSH)** — 
 在 DSH「设置 → 插件」的组合包安装入口粘贴：
 
 ```text
-github:jesongit/dsh-todolist#v1.0.2
+github:jesongit/dsh-todolist#v1.0.3
 ```
 
-或从 [GitHub Releases](https://github.com/jesongit/dsh-todolist/releases/tag/v1.0.2) 下载发行包后选择本地包安装。
+或从 [GitHub Releases](https://github.com/jesongit/dsh-todolist/releases/tag/v1.0.3) 下载发行包后选择本地包安装。
 
 ### CLI（未独立验证）
 
 ```sh
-dsh plugin --profile <your-profile> add github:jesongit/dsh-todolist#v1.0.2
+dsh plugin --profile <your-profile> add github:jesongit/dsh-todolist#v1.0.3
 ```
 
 ## 兼容性 / Compatibility
