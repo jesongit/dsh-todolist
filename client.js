@@ -1773,6 +1773,8 @@ window.__ModuleLoader__.load({
           })
         }, [])
 
+        // 提示气泡的委托 Hook：必须在所有提前 return 之前无条件调用。
+        const tips = usePanelTips()
         if (!isConversation || traj) return null
         // Fallback area/pos so the panel still renders even if the area
         // measurement has not settled (e.g. right after switching conversation
@@ -1791,7 +1793,6 @@ window.__ModuleLoader__.load({
           `${n} ${label}`,
         )
         const drag = { onPointerDown: onGripDown, onPointerMove: onGripMove, onPointerUp: onGripUp, onPointerCancel: onGripUp, 'data-dragging': dragging ? 1 : 0 }
-        const tips = usePanelTips()
         return h(DtlBoundary, null,
           h(
             'div',
