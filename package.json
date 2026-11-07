@@ -1,8 +1,8 @@
 {
   "name": "@local/dsh-todolist",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "type": "module",
-  "description": "Workspace-scoped todo lists and sticky notes for DeepSeek Harness: a floating panel plus an aggregate board grouped by workspace.",
+  "description": "Workspace-scoped todo lists, sticky notes and a photo rope for DeepSeek Harness: a floating panel plus an aggregate board grouped by workspace.",
   "license": "MIT",
   "author": "jesongit",
   "repository": {
@@ -19,6 +19,7 @@
     "todo",
     "todolist",
     "sticky-notes",
+    "photo-rope",
     "workspace"
   ],
   "exports": {

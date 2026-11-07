@@ -250,6 +250,39 @@ window.__ModuleLoader__.load({
       return segs
     }
 
+    // GitHub 式气泡提示：委托监听根节点内所有 [data-tip] 元素，气泡用
+    // position:fixed 挂最外层（不受面板 overflow 裁剪），定位到元素下方，
+    // 空间不足时移到上方。返回需展开到根节点上的事件 props 与气泡元素。
+    function usePanelTips() {
+      const [tip, setTip] = React.useState(null) // { text, left, top, below }
+      const curRef = React.useRef(null)
+      React.useEffect(() => () => { curRef.current = null }, [])
+      const show = (el) => {
+        const text = el.getAttribute('data-tip')
+        if (!text) { curRef.current = null; setTip(null); return }
+        const vw = window.innerWidth || 1200
+        const vh = window.innerHeight || 800
+        const r = el.getBoundingClientRect()
+        const below = r.bottom + 34 < vh
+        const estW = Math.min(text.length * 7 + 18, vw - 24)
+        let left = r.left + r.width / 2
+        left = Math.min(Math.max(left, estW / 2 + 8), Math.max(estW / 2 + 8, vw - estW / 2 - 8))
+        setTip({ text, left: Math.round(left), top: Math.round(below ? r.bottom + 6 : r.top - 6), below })
+      }
+      const onMouseOver = (e) => {
+        const el = e.target && e.target.closest ? e.target.closest('[data-tip]') : null
+        if (el) { if (curRef.current !== el) { curRef.current = el; show(el) } }
+        else if (curRef.current) { curRef.current = null; setTip(null) }
+      }
+      const onMouseOut = (e) => {
+        const el = curRef.current
+        if (!el) return
+        if (!e.relatedTarget || !el.contains(e.relatedTarget)) { curRef.current = null; setTip(null) }
+      }
+      const tipEl = tip ? h('div', { className: 'dtl-tip', 'data-below': tip.below ? 1 : 0, style: { left: `${tip.left}px`, top: `${tip.top}px` } }, tip.text) : null
+      return { onMouseOver, onMouseOut, tipEl }
+    }
+
     /* ── error boundary: show a message instead of a blank slot ─── */
     class DtlBoundary extends React.Component {
       constructor(props) { super(props); this.state = { error: null } }
@@ -280,7 +313,7 @@ window.__ModuleLoader__.load({
 
     /* ── style ───────────────────────────────────────── */
     const STYLE = `
-.dtl-panel,.dtl-root{--dtl-bg:var(--dsw-alias-bg-layer-1,#fff);--dtl-bg2:var(--dsw-alias-bg-layer-2,#f6f6f6);--dtl-fg:var(--dsw-alias-label-primary,#222);--dtl-fg2:var(--dsw-alias-label-secondary,#666);--dtl-border:var(--dsw-alias-border-l1,#d8d8d8);--dtl-brand:var(--dsw-alias-brand-primary,#247bbf);--dtl-ok:var(--dsw-alias-state-success-primary,#2ea043);--dtl-warn:var(--dsw-alias-state-warn-primary,#d29922);--dtl-err:var(--dsw-alias-state-error-primary,#cf222e);font-family:inherit;font-size:13px;color:var(--dtl-fg)}
+.dtl-panel,.dtl-root,.dtl-rope-wrap{--dtl-bg:var(--dsw-alias-bg-layer-1,#fff);--dtl-bg2:var(--dsw-alias-bg-layer-2,#f6f6f6);--dtl-fg:var(--dsw-alias-label-primary,#222);--dtl-fg2:var(--dsw-alias-label-secondary,#666);--dtl-border:var(--dsw-alias-border-l1,#d8d8d8);--dtl-brand:var(--dsw-alias-brand-primary,#247bbf);--dtl-ok:var(--dsw-alias-state-success-primary,#2ea043);--dtl-warn:var(--dsw-alias-state-warn-primary,#d29922);--dtl-err:var(--dsw-alias-state-error-primary,#cf222e);font-family:inherit;font-size:13px;color:var(--dtl-fg)}
 .dtl-panel{position:fixed;z-index:1000;width:330px;max-height:75vh;display:flex;flex-direction:column;background:var(--dtl-bg);border:1px solid var(--dtl-border);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);overflow:hidden}
 .dtl-panel .dtl-root{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
 .dtl-panel .dtl-head{flex:none}
@@ -301,8 +334,6 @@ window.__ModuleLoader__.load({
 .dtl-iconbtn[data-danger="1"]:hover{background:color-mix(in srgb,var(--dtl-err) 15%,transparent);color:var(--dtl-err)}
 .dtl-gh{position:relative;opacity:0;transition:opacity .15s ease}
 .dtl-head:hover .dtl-gh,.dtl-gh:focus-visible{opacity:1}
-.dtl-gh::after{content:'欢迎 Star ~';position:absolute;top:calc(100% + 6px);right:0;z-index:10;padding:3px 8px;border-radius:6px;background:var(--dtl-fg);color:var(--dtl-bg);font-size:11px;line-height:1.4;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s ease .1s}
-.dtl-gh:hover::after,.dtl-gh:focus-visible::after{opacity:1}
 .dtl-body{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:80px}
 .dtl-body > *,.dtl-wsbody > *{flex:0 0 auto}
 .dtl-empty{color:var(--dtl-fg2);text-align:center;padding:18px 8px;font-size:12px}
@@ -364,31 +395,32 @@ window.__ModuleLoader__.load({
 .dtl-note[data-color="green"]{background:color-mix(in srgb,var(--dtl-ok) 12%,var(--dtl-bg))}
 .dtl-note[data-color="blue"]{background:color-mix(in srgb,var(--dtl-brand) 12%,var(--dtl-bg))}
 .dtl-note[data-color="pink"]{background:color-mix(in srgb,var(--dtl-err) 10%,var(--dtl-bg))}
+.dtl-note[data-color="orange"]{background:color-mix(in srgb,#f97316 12%,var(--dtl-bg))}
+.dtl-note[data-color="purple"]{background:color-mix(in srgb,#8b5cf6 12%,var(--dtl-bg))}
+.dtl-note[data-color="cyan"]{background:color-mix(in srgb,#06b6d4 12%,var(--dtl-bg))}
 .dtl-note[data-pinned="1"][data-color="yellow"]{background:color-mix(in srgb,var(--dtl-warn) 21%,var(--dtl-bg))}
 .dtl-note[data-pinned="1"][data-color="green"]{background:color-mix(in srgb,var(--dtl-ok) 21%,var(--dtl-bg))}
 .dtl-note[data-pinned="1"][data-color="blue"]{background:color-mix(in srgb,var(--dtl-brand) 21%,var(--dtl-bg))}
 .dtl-note[data-pinned="1"][data-color="pink"]{background:color-mix(in srgb,var(--dtl-err) 19%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="orange"]{background:color-mix(in srgb,#f97316 21%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="purple"]{background:color-mix(in srgb,#8b5cf6 21%,var(--dtl-bg))}
+.dtl-note[data-pinned="1"][data-color="cyan"]{background:color-mix(in srgb,#06b6d4 21%,var(--dtl-bg))}
 .dtl-note .dtl-note-ta{background:none;border:none;color:var(--dtl-fg);font:inherit;resize:none;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;width:100%}
 .dtl-note-body{background:none;border:none;color:var(--dtl-fg);font:inherit;overflow-y:hidden;outline:none;min-height:40px;max-height:240px;box-sizing:border-box;line-height:1.4;padding:2px 0;white-space:pre-wrap;word-break:break-word;cursor:text}
-.dtl-pin{position:absolute;top:-2px;left:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
-.dtl-note:hover .dtl-pin{opacity:.6}
-.dtl-pin:hover{opacity:1;color:var(--dtl-brand);background:transparent}
-.dtl-pin[data-on="1"]{opacity:1;color:var(--dtl-brand)}
-.dtl-note-del{position:absolute;top:-2px;right:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:none;cursor:pointer;color:var(--dtl-fg2);padding:2px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
-.dtl-note:hover .dtl-note-del{opacity:.7}
-.dtl-note-del:hover{opacity:1;color:var(--dtl-err);background:transparent}
-.dtl-note-del[data-danger="1"]{opacity:1;color:var(--dtl-err)}
-.dtl-note-copy{position:absolute;right:-2px;bottom:-2px;z-index:2;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;color:var(--dtl-fg2);padding:3px;border-radius:6px;line-height:1;opacity:0;transition:opacity .15s ease,color .15s ease}
-.dtl-note:hover .dtl-note-copy{opacity:.7}
-.dtl-note-copy:hover{opacity:1;color:var(--dtl-brand);background:transparent}
-.dtl-ctxmenu{position:fixed;z-index:1000;min-width:150px;box-sizing:border-box;background:var(--dtl-bg);color:var(--dtl-fg);border:1px solid var(--dtl-border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.20);padding:8px;display:flex;flex-direction:column;gap:8px;font-weight:400;font-size:13px}
-.dtl-ctx-title{font-size:11px;color:var(--dtl-fg2);padding:0 2px}
-.dtl-ctx-colors{display:flex;gap:8px;padding:0 2px}
-.dtl-ctx-sep{height:1px;background:var(--dtl-border)}
-.dtl-ctx-del{background:none;border:none;text-align:left;color:var(--dtl-err);font:inherit;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer}
-.dtl-ctx-del:hover{background:color-mix(in srgb,var(--dtl-err) 12%,transparent)}
-.dtl-ctx-item{background:none;border:none;text-align:left;color:var(--dtl-fg);font:inherit;font-size:13px;padding:5px 6px;border-radius:6px;cursor:pointer}
-.dtl-ctx-item:hover{background:rgba(127,127,127,.12)}
+.dtl-note-tools{position:relative;display:flex;align-items:center;justify-content:flex-end;gap:2px;margin:-2px -2px -4px 0}
+.dtl-note-tools button{display:inline-flex;align-items:center;justify-content:center;width:20px;height:13px;padding:0;background:transparent;border:none;border-radius:6px;cursor:pointer;color:var(--dtl-fg2);line-height:1;transition:color .15s ease,opacity .15s ease}
+.dtl-note-tools .dtl-note-copy:hover{color:var(--dtl-brand)}
+.dtl-note-tools .dtl-note-del:hover{color:var(--dtl-err)}
+.dtl-note-tools .dtl-note-del[data-danger="1"]{color:var(--dtl-err)}
+.dtl-note-tools .dtl-pin,.dtl-note-tools .dtl-note-color{opacity:0}
+.dtl-note:hover .dtl-note-tools .dtl-pin,.dtl-note:hover .dtl-note-tools .dtl-note-color{opacity:1}
+.dtl-note-tools .dtl-pin:hover{color:var(--dtl-brand)}
+.dtl-note-tools .dtl-pin[data-on="1"]{opacity:1;color:var(--dtl-brand)}
+.dtl-note-palette{position:absolute;left:22px;top:-1px;z-index:3;display:flex;align-items:center;gap:5px;background:var(--dtl-bg);border:1px solid var(--dtl-border);border-radius:999px;padding:1px 7px}
+.dtl-note-palette .dtl-swatch{width:12px;height:12px}
+.dtl-note-palette .dtl-swatch:hover{opacity:1}
+.dtl-note-tools-spacer{flex:1 1 auto}
+.dtl-note-tools .dtl-note-color[data-on="1"]{opacity:1;color:var(--dtl-brand)}
 .dtl-token{display:inline-flex;align-items:center;vertical-align:baseline;max-width:100%;margin:0 2px;padding:1px 8px;border-radius:999px;border:1px solid var(--dtl-border);background:var(--dtl-bg2);color:var(--dtl-fg);font-size:12px;line-height:1.5;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dtl-token:hover{background:rgba(127,127,127,.14)}
 .dtl-token[data-type="link"]{color:var(--dtl-brand);text-decoration:underline;text-underline-offset:2px}
@@ -400,6 +432,9 @@ window.__ModuleLoader__.load({
 .dtl-swatch[data-c="green"]{background:var(--dtl-ok)}
 .dtl-swatch[data-c="blue"]{background:var(--dtl-brand)}
 .dtl-swatch[data-c="pink"]{background:var(--dtl-err)}
+.dtl-swatch[data-c="orange"]{background:#f97316}
+.dtl-swatch[data-c="purple"]{background:#8b5cf6}
+.dtl-swatch[data-c="cyan"]{background:#06b6d4}
 .dtl-foot{border-top:1px solid var(--dtl-border);padding:6px 8px;font-size:11px;color:var(--dtl-fg2);display:flex;gap:6px;align-items:center}
 .dtl-newlist{display:flex;gap:4px}
 .dtl-cap{font-size:11px;opacity:.7;text-transform:uppercase;margin-top:4px}
@@ -412,6 +447,8 @@ window.__ModuleLoader__.load({
 .dtl-wscard{position:relative;display:flex;flex-direction:column;border:1px solid var(--dtl-border);border-radius:14px;background:var(--dtl-bg);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.07),0 12px 28px -16px rgba(0,0,0,.32);max-height:50vh}
 .dtl-wscard:focus-within{box-shadow:0 0 0 2px var(--dtl-brand)}
 .dtl-wscard[data-dragging="1"]{opacity:.45}
+/* 工作区卡片内嵌插件面板：填满卡片剩余空间并内部滚动 */
+.dtl-wscard .dtl-root{flex:1 1 auto;min-height:0;overflow:auto}
 .dtl-wscard[data-over="1"]::before{content:'';position:absolute;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--dtl-brand);z-index:3}
 .dtl-wscard[data-over="1"][data-side="left"]::before{left:0}
 .dtl-wscard[data-over="1"][data-side="right"]::before{right:0}
@@ -424,6 +461,38 @@ window.__ModuleLoader__.load({
 .dtl-wsbody{padding:8px 10px 10px;display:flex;flex-direction:column;gap:8px;overflow:auto;min-height:0;flex:1 1 auto}
 .dtl-wsbody .dtl-listcard{border-color:var(--dtl-border)}
 .dtl-wsempty{padding:10px 4px;color:var(--dtl-fg2);font-size:12px;text-align:center}
+/* ── photo rope (挂绳)：面板内部、标签行下方，背景透明 ── */
+.dtl-rope-wrap{flex:none;padding:0;user-select:none;background:transparent}
+.dtl-rope-drop{position:relative;height:34px;border-radius:10px;background:transparent;touch-action:none;outline:none}
+.dtl-rope-drop::before{content:'';position:absolute;left:16px;right:16px;top:3px;height:2px;background:#000;border-radius:1px;pointer-events:none}
+.dtl-root[data-over="1"]{outline:2px dashed var(--dtl-brand);outline-offset:-2px;background:color-mix(in srgb,var(--dtl-brand) 5%,transparent)}
+.dtl-rope-drop[data-empty="1"]::before{display:none}
+.dtl-rope-hintonly{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;line-height:1.4;color:var(--dtl-fg2);opacity:.75;text-align:center;pointer-events:none}
+.dtl-root{position:relative}
+/* 飘字：position:fixed 挂在最外层（视口坐标按面板实测位置计算），
+   不被面板 overflow 裁剪、不被任何内容遮挡；显示片刻后直接消失 */
+.dtl-rope-msgpill{position:fixed;transform:translate(-50%,-50%);z-index:2147483002;max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;color:var(--dtl-brand);background:transparent;border:none;padding:2px 8px;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.95),0 0 10px rgba(255,255,255,.8)}
+/* 缩略图卡片：顶部中央一枚图钉把图钉在弧线上，图片带随机微倾自然垂挂 */
+.dtl-clip{position:absolute;left:0;top:0;cursor:grab;transform-origin:50% 0}
+.dtl-clip:active{cursor:grabbing}
+.dtl-clip-pin{position:absolute;left:50%;top:-4px;width:9px;height:9px;transform:translateX(-50%);z-index:3;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+/* 图片绕图钉摆动：图钉保持垂直钉在绳线上，图片才是倾斜的部分 */
+.dtl-clip-swing{transform-origin:50% 0;transition:transform .18s ease}
+.dtl-clip:hover .dtl-clip-swing{transform:rotate(0deg) !important}
+.dtl-clip-img{position:relative;width:34px;height:26px;margin:0 auto;box-sizing:border-box;background:var(--dtl-bg);border:1px solid var(--dtl-border);border-radius:1px;box-shadow:0 1px 3px rgba(0,0,0,.18);padding:1px;cursor:pointer}
+.dtl-clip-img:hover{outline:2px solid var(--dtl-brand);outline-offset:-1px}
+.dtl-clip-img img{width:100%;height:100%;object-fit:cover;display:block;background:var(--dtl-bg2);pointer-events:none}
+/* 图片标题固定在绳子上方（不随图片倾斜），图片挂在钉下可摆动 */
+.dtl-clip-draghint{position:fixed;z-index:2147483002;font-size:11px;font-weight:700;line-height:1.4;background:transparent;border:none;padding:0;white-space:nowrap;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.85),0 0 6px rgba(255,255,255,.6)}
+.dtl-clip-img[data-grabbing="1"]{cursor:grabbing}
+.dtl-rope-zoomback{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.55);cursor:zoom-out}
+.dtl-rope-zoom{position:fixed;z-index:2147483001;box-shadow:0 10px 34px rgba(0,0,0,.45);background:var(--dtl-bg);padding:6px;border:1px solid var(--dtl-border);border-radius:2px;cursor:default}
+.dtl-rope-zoom img{display:block;max-width:none;max-height:none}
+/* GitHub 式深色气泡提示：fixed 挂最外层（不受面板 overflow 裁剪），
+   固定深底白字（不依赖主题变量，任何挂载点都可读），
+   由 usePanelTips 委托监听 [data-tip] 元素并定位到其下方/上方 */
+.dtl-tip{position:fixed;transform:translateX(-50%);z-index:2147483003;padding:4px 9px;border-radius:6px;background:#24292f;color:#ffffff;font-size:11px;line-height:1.4;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.12)}
+.dtl-tip[data-below="0"]{transform:translate(-50%,-100%)}
 `
 
     /* ── shared app model hooks ──────────────────────── */
@@ -556,7 +625,7 @@ window.__ModuleLoader__.load({
         })
       }
       return h('div', {
-        className: 'dtl-itemview', title: '点击编辑', role: 'textbox', tabIndex: 0, 'aria-label': '事项内容',
+        className: 'dtl-itemview', 'data-tip': '点击编辑', role: 'textbox', tabIndex: 0, 'aria-label': '事项内容',
         onClick: (e) => { e.stopPropagation(); setEditing(true) },
       }, item.text || ' ')
     }
@@ -611,7 +680,7 @@ window.__ModuleLoader__.load({
           ? h('input', {
               ref: inputRef, className: 'dtl-listtitle-input', value: title, maxLength: 500,
               'aria-label': '清单名称', 'aria-invalid': !!error, 'aria-busy': saving, readOnly: saving,
-              title: '回车保存，Esc 取消，点击其他位置保存',
+              'data-tip': '回车保存，Esc 取消，点击其他位置保存',
               onChange: (e) => { setTitle(e.target.value); setError('') },
               onBlur: () => { void save() },
               onKeyDown: (e) => {
@@ -625,7 +694,7 @@ window.__ModuleLoader__.load({
             })
           : h('button', {
               ref: buttonRef, type: 'button', className: 'dtl-listtitle-btn',
-              title: '单击展开/收起，双击重命名（键盘 F2）', 'aria-expanded': expanded,
+              'data-tip': '单击展开/收起，双击重命名（键盘 F2）', 'aria-expanded': expanded,
               onClick: (e) => {
                 clearClick()
                 if (e.detail === 0) onToggle()
@@ -673,7 +742,7 @@ window.__ModuleLoader__.load({
             'button',
             {
               className: 'dtl-iconbtn dtl-list-pin', 'data-on': pinned ? 1 : 0,
-              title: pinned ? '取消置顶清单' : '置顶清单', 'aria-label': pinned ? '取消置顶清单' : '置顶清单', 'aria-pressed': pinned ? 'true' : 'false',
+              'data-tip': pinned ? '取消置顶清单' : '置顶清单', 'aria-label': pinned ? '取消置顶清单' : '置顶清单', 'aria-pressed': pinned ? 'true' : 'false',
               onClick: (e) => { e.stopPropagation(); if (onTogglePin) onTogglePin() },
             },
             h(PinIcon, { size: 13 }),
@@ -681,7 +750,7 @@ window.__ModuleLoader__.load({
           h(
             'button',
             {
-              className: 'dtl-iconbtn', title: '添加事项', 'aria-label': '添加事项',
+              className: 'dtl-iconbtn', 'data-tip': '添加事项', 'aria-label': '添加事项',
               onClick: (e) => { e.stopPropagation(); setHi(true); setAdding(true) },
             },
             h(Icon, { d: ICON.plus }),
@@ -690,7 +759,7 @@ window.__ModuleLoader__.load({
             'button',
             {
               className: 'dtl-iconbtn', 'data-danger': confirmDel ? 1 : 0,
-              title: confirmDel ? '再次点击确认删除清单' : '删除清单',
+              'data-tip': confirmDel ? '再次点击确认删除清单' : '删除清单',
               'aria-label': confirmDel ? '确认删除清单' : '删除清单',
               onClick: (e) => {
                 e.stopPropagation()
@@ -733,7 +802,7 @@ window.__ModuleLoader__.load({
                     ),
                   ),
                   h(ItemText, { item, call, workspaceId, listId: list.id, onChange: reload }),
-                  h('button', { className: 'dtl-mini', title: '删除事项', 'aria-label': '删除事项', onClick: () => void call('item.remove', { workspaceId, listId: list.id, itemId: item.id }).then(reload).catch((err) => onChange && onChange(null, err)) }, h(Icon, { d: ICON.x, size: 17 })),
+                  h('button', { className: 'dtl-mini', 'data-tip': '删除事项', 'aria-label': '删除事项', onClick: () => void call('item.remove', { workspaceId, listId: list.id, itemId: item.id }).then(reload).catch((err) => onChange && onChange(null, err)) }, h(Icon, { d: ICON.x, size: 17 })),
                 ),
               )),
             )
@@ -741,8 +810,393 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /* ── tab container used by both overlay and panel ── */
-    function App({ ctx, workspaceId, workspaceTitle, call, compact, drag, onCollapse }) {
+    /* ── photo rope: a string with wooden clips holding picture thumbnails ── */
+    // Data: photos [{ id, name, dataUrl }] from the host store, per workspace.
+    // - drop image files / double-click empty rope → pinned as a thumbnail
+    //   (auto-shrunk, auto-named 图1 图2 …)
+    // - hover the rope + wheel → slides the clips along the rope
+    // - click a photo → normal-size view pinned at the clip's top-left (cursor
+    //   ends up just outside it, near the upper-left corner); click again →
+    //   shrink back; double-click → copy as PNG (pasteable into QQ etc.)
+    const ROPE_THUMB = { w: 32, h: 24 } // thumbnail inner box (inside 1px padding)
+    const ROPE_PITCH = 44 // horizontal distance between clips
+    const ROPE_EDGE = 14  // unused now (curve spacing is proportional)
+
+    function readImageFile(file) {
+      return new Promise((resolve, reject) => {
+        if (!file || !/^image\//.test(String(file.type || ''))) { reject(new Error('不是图片文件')); return }
+        const fr = new FileReader()
+        fr.onload = () => resolve(String(fr.result || ''))
+        fr.onerror = () => reject(new Error('读取文件失败'))
+        fr.readAsDataURL(file)
+      })
+    }
+
+    // Keep the ORIGINAL image so 单击放大 shows the true normal size (and QQ
+    // paste gets full quality). Only when the data URL is too big to store
+    // (> ~6 MB) do we downscale, to at most a 2048px long edge.
+    function keepOriginalOrCompact(dataUrl, maxBytes = 6 * 1024 * 1024) {
+      return new Promise((resolve, reject) => {
+        if (String(dataUrl).length <= maxBytes) { resolve({ dataUrl, compacted: false }); return }
+        const img = new Image()
+        img.onload = () => {
+          try {
+            const iw = img.naturalWidth || img.width || 1
+            const ih = img.naturalHeight || img.height || 1
+            const scale = Math.min(1, 2048 / Math.max(iw, ih))
+            const w = Math.max(1, Math.round(iw * scale))
+            const hh = Math.max(1, Math.round(ih * scale))
+            const c = document.createElement('canvas')
+            c.width = w; c.height = hh
+            c.getContext('2d').drawImage(img, 0, 0, w, hh)
+            let out = c.toDataURL('image/png')
+            if (out.length > 8 * 1024 * 1024) out = c.toDataURL('image/jpeg', 0.92)
+            resolve({ dataUrl: out, compacted: true })
+          } catch (e) { reject(e) }
+        }
+        img.onerror = () => reject(new Error('图片解码失败'))
+        img.src = dataUrl
+      })
+    }
+
+    // Copy an image data URL to the system clipboard as a real PNG blob, so it
+    // can be pasted into QQ / WeChat / Office directly.
+    async function copyDataUrlAsPng(dataUrl) {
+      const blob = await (await fetch(dataUrl)).blob()
+      const png = blob.type === 'image/png' ? blob : new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+          try {
+            const c = document.createElement('canvas')
+            c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height
+            c.getContext('2d').drawImage(img, 0, 0)
+            c.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG 编码失败'))), 'image/png')
+          } catch (e) { reject(e) }
+        }
+        img.onerror = () => reject(new Error('图片解码失败'))
+        img.src = dataUrl
+      })
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+    }
+
+    function usePhotoRope(workspaceId, call, onerror) {
+      const [photos, setPhotos] = React.useState([])
+      const [msg, setMsg] = React.useState('')
+      const [msgId, setMsgId] = React.useState(0)
+      const msgTimer = React.useRef(null)
+      const say = React.useCallback((text) => {
+        setMsg(String(text || ''))
+        setMsgId((k) => k + 1)
+        clearTimeout(msgTimer.current)
+        msgTimer.current = setTimeout(() => setMsg(''), 2400)
+      }, [])
+      React.useEffect(() => () => clearTimeout(msgTimer.current), [])
+      React.useEffect(() => {
+        setPhotos([])
+        if (!workspaceId) return
+        const c = new AbortController()
+        call('photos.list', { workspaceId }, c.signal)
+          .then((v) => setPhotos((v && v.photos) || []))
+          .catch(() => {})
+        return () => c.abort()
+      }, [workspaceId, call])
+      const refresh = (v) => { if (v && Array.isArray(v.photos)) setPhotos(v.photos) }
+      const addFromDataUrl = async (dataUrl, ext) => {
+        try {
+          const kept = await keepOriginalOrCompact(dataUrl)
+          const v = await call('photo.add', { workspaceId, dataUrl: kept.dataUrl, ext: ext || 'png' })
+          refresh(v); say(kept.compacted ? '已挂上（已压缩）' : '已挂上')
+        } catch (e) { onerror && onerror(e); say('挂图失败') }
+      }
+      const addFiles = async (fileList) => {
+        const files = Array.from(fileList || []).filter((f) => /^image\//.test(String(f.type || '')))
+        if (!files.length) { say('只支持图片'); return }
+        for (const f of files) {
+          try { await addFromDataUrl(await readImageFile(f), (String(f.name || '').match(/\.([A-Za-z0-9]+)$/) || [])[1]) }
+          catch (e) { say('挂图失败') }
+        }
+      }
+      const remove = async (photoId) => {
+        try { refresh(await call('photo.remove', { workspaceId, photoId })); say('已取下') }
+        catch (e) { onerror && onerror(e) }
+      }
+      return { photos, msg, msgId, say, addFromDataUrl, addFiles, remove }
+    }
+
+    // Full-size view centered on screen, at the photo's natural size (scaled
+    // down only when it exceeds the viewport). Click anywhere shrinks back.
+    function RopeLightbox({ photo, onClose }) {
+      const [box, setBox] = React.useState(null)
+      React.useLayoutEffect(() => {
+        const img = new Image()
+        img.onload = () => {
+          const natW = img.naturalWidth || 1
+          const natH = img.naturalHeight || 1
+          const maxW = Math.max(120, (window.innerWidth || 1200) - 48)
+          const maxH = Math.max(120, (window.innerHeight || 800) - 48)
+          const scale = Math.min(1, maxW / natW, maxH / natH)
+          setBox({ w: Math.round(natW * scale), h: Math.round(natH * scale) })
+        }
+        img.src = photo.dataUrl
+      }, [photo.dataUrl])
+      if (!box) return null
+      const left = Math.max(4, Math.round(((window.innerWidth || 1200) - box.w) / 2))
+      const top = Math.max(4, Math.round(((window.innerHeight || 800) - box.h) / 2))
+      return h('div', { className: 'dtl-rope-zoomback', onClick: onClose, onDoubleClick: onClose, onContextMenu: (e) => { e.preventDefault(); onClose() } },
+        h('div', { className: 'dtl-rope-zoom', style: { left: `${left}px`, top: `${top}px` }, onClick: onClose, onDoubleClick: onClose },
+          h('img', { src: photo.dataUrl, width: box.w, height: box.h, alt: photo.name, draggable: false })))
+    }
+
+    function PhotoClip({ photo, x, y, tilt = 0, z = 10, onRemove, onZoom, onCopied }) {
+      const clickTimer = React.useRef(null)
+      React.useEffect(() => () => clearTimeout(clickTimer.current), [])
+      const onClick = () => {
+        // Zoom opens ~240ms later unless a double click cancels the timer first.
+        if (clickTimer.current) { clearTimeout(clickTimer.current); clickTimer.current = null }
+        clickTimer.current = setTimeout(() => {
+          clickTimer.current = null
+          onZoom()
+        }, 240)
+      }
+      const onDoubleClick = (e) => {
+        e.stopPropagation()
+        if (draggedRef.current) { draggedRef.current = false; return }
+        if (clickTimer.current) { clearTimeout(clickTimer.current); clickTimer.current = null }
+        void copyDataUrlAsPng(photo.dataUrl).then(() => onCopied(photo.name)).catch(() => onCopied(null))
+      }
+      // 按住拖动取下：图片脱离图钉跟随鼠标，拖远（>36px）松手即删除。
+      // 直接操作 DOM transform，拖动零延迟；未拖远的松手回弹原位。
+      const swingRef = React.useRef(null)
+      const hintRef = React.useRef(null)
+      const dragState = React.useRef(null)
+      const draggedRef = React.useRef(false)
+      const onPointerDown = (e) => {
+        if (e.button !== 0) return
+        const el = e.currentTarget
+        const startX = e.clientX, startY = e.clientY
+        dragState.current = { active: false, armed: false }
+        draggedRef.current = false
+        try { el.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+        const onMove = (ev) => {
+          const st = dragState.current
+          if (!st) return
+          const dx = ev.clientX - startX, dy = ev.clientY - startY
+          const dist = Math.hypot(dx, dy)
+          if (!st.active && dist > 6) {
+            st.active = true
+            draggedRef.current = true
+            if (clickTimer.current) { clearTimeout(clickTimer.current); clickTimer.current = null }
+            if (swingRef.current) swingRef.current.style.transition = 'none'
+            try { el.setAttribute('data-grabbing', '1') } catch { /* ignore */ }
+          }
+          if (!st.active) return
+          st.armed = dist > 36
+          if (swingRef.current) swingRef.current.style.transform = `translate(${dx}px, ${dy}px) rotate(0deg)`
+          if (hintRef.current) {
+            hintRef.current.style.display = 'block'
+            hintRef.current.style.left = `${ev.clientX + 12}px`
+            hintRef.current.style.top = `${ev.clientY + 12}px`
+            hintRef.current.textContent = st.armed ? '松手取下' : '继续拖远以取下'
+            hintRef.current.style.color = st.armed ? 'var(--dtl-err)' : 'var(--dtl-fg2)'
+          }
+        }
+        const onUp = () => {
+          const st = dragState.current
+          dragState.current = null
+          try { el.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+          el.removeEventListener('pointermove', onMove)
+          el.removeEventListener('pointerup', onUp)
+          el.removeEventListener('pointercancel', onUp)
+          if (swingRef.current) { swingRef.current.style.transition = ''; swingRef.current.style.transform = `rotate(${Math.round(tilt)}deg)` }
+          try { el.removeAttribute('data-grabbing') } catch { /* ignore */ }
+          if (hintRef.current) hintRef.current.style.display = 'none'
+          if (st && st.active && st.armed) onRemove()
+        }
+        el.addEventListener('pointermove', onMove)
+        el.addEventListener('pointerup', onUp)
+        el.addEventListener('pointercancel', onUp)
+      }
+      // Structure: the pin stays vertical and hangs from the curve; the photo
+      // swings below it around the pin point (transform-origin 50% 0 on the
+      // inner wrapper), like a real pinned photo. Hover straightens + lifts.
+      return h('div', { className: 'dtl-clip', style: { left: `${Math.round(x)}px`, top: `${Math.round(y)}px`, zIndex: z } },
+        h('svg', { className: 'dtl-clip-pin', viewBox: '0 0 10 10', 'aria-hidden': true },
+          h('circle', { cx: 5, cy: 5, r: 3.2, fill: '#c0392b', stroke: '#7f2116', strokeWidth: 1 }),
+          h('circle', { cx: 3.8, cy: 3.8, r: 1.1, fill: 'rgba(255,255,255,.55)' })),
+        h('div', { ref: swingRef, className: 'dtl-clip-swing', style: { transform: `rotate(${Math.round(tilt)}deg)` } },
+          h('div', { className: 'dtl-clip-img', 'data-tip': '单击放大 · 双击复制 · 按住拖远取下', role: 'button', tabIndex: -1, onClick, onDoubleClick, onPointerDown },
+            h('img', { src: photo.dataUrl, alt: photo.name, draggable: false, loading: 'lazy' })),
+        ),
+        h('div', { ref: hintRef, className: 'dtl-clip-draghint', style: { display: 'none' } }),
+      )
+    }
+
+    function PhotoRope({ rope }) {
+      const SLOTS = 6 // 每屏固定 6 个钉位，窗口外的图堆叠到两端图片后面
+      const [offset, setOffset] = React.useState(0)
+      const [zoom, setZoom] = React.useState(null) // { photo }
+      const boxRef = React.useRef(null)
+      const [viewW, setViewW] = React.useState(294)
+      React.useEffect(() => {
+        const el = boxRef.current
+        if (!el || typeof ResizeObserver !== 'function') return () => {}
+        const ro = new ResizeObserver(() => setViewW(Math.max(160, el.clientWidth)))
+        ro.observe(el)
+        setViewW(Math.max(160, el.clientWidth))
+        return () => ro.disconnect()
+      }, [])
+      const photos = rope.photos
+      const n = photos.length
+      const onDrop = (e) => {
+        e.preventDefault()
+        // 标记已处理（根节点据此跳过重复挂图），但放行冒泡——
+        // 根节点的 drop 处理负责关闭面板高亮，不能拦。
+        try { e.nativeEvent && (e.nativeEvent.__dtlHandled = true) } catch { /* ignore */ }
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { void rope.addFiles(e.dataTransfer.files); return }
+        // Some apps drag a DOM <img> instead of a File — grab its src.
+        const img = e.target && e.target.closest && e.target.closest('img')
+        const src = img && img.getAttribute('src')
+        if (src && src.startsWith('data:image/')) void rope.addFromDataUrl(src)
+      }
+      // 直线挂绳：固定 6 个钉位（对称均分绳宽），窗口外图片堆叠到两端图片后面。
+      const ropeY = 2 // the straight line's y inside the drop box
+      const EDGE = 16 // symmetric inset, matches the rope line's own inset
+      const jitter = (photo, i) => {
+        let h = 0
+        const s = `${String(photo.id || photo.name || '')}:${i}`
+        for (let k = 0; k < s.length; k++) h = (h * 31 + s.charCodeAt(k)) >>> 0
+        return { tilt: (h % 33) - 16 } // -16° … +16°
+      }
+      const usableW = Math.max(0, viewW - EDGE * 2)
+      const pitch = usableW / SLOTS
+      const maxOff = Math.max(0, n - SLOTS)
+      const off = Math.min(offset, maxOff)
+      const clips = []
+      photos.forEach((p, i) => {
+        const rel = i - off
+        let slot = rel, depth = 0, side = 0, z = 10
+        if (rel < 0) { slot = 0; depth = -rel; side = -1; z = Math.max(1, 9 - depth) }
+        else if (rel > SLOTS - 1) { slot = SLOTS - 1; depth = rel - SLOTS + 1; side = 1; z = Math.max(1, 9 - depth) }
+        const { tilt } = jitter(p, i)
+        const xCenter = EDGE + (slot + 0.5) * pitch + side * Math.min(depth, 4) * 3
+        clips.push({ p, x: xCenter - 17, y: ropeY + Math.min(depth, 4) * 1.5, tilt, z })
+      })
+      // Wheel shifts the 6-photo window one step per notch (≈53px accumulated).
+      const accRef = React.useRef(0)
+      const maxOffRef = React.useRef(maxOff)
+      maxOffRef.current = maxOff
+      React.useEffect(() => {
+        const el = boxRef.current
+        if (!el) return () => {}
+        const handler = (e) => {
+          if (maxOffRef.current <= 0) return
+          e.preventDefault()
+          const unit = e.deltaMode === 1 ? 16 : 1 // lines → px (Firefox)
+          accRef.current += (e.deltaY + e.deltaX) * unit
+          const step = 53
+          while (Math.abs(accRef.current) >= step) {
+            const dir = accRef.current > 0 ? 1 : -1
+            accRef.current -= dir * step
+            setOffset((o) => Math.min(Math.max(0, o + dir), maxOffRef.current))
+          }
+        }
+        el.addEventListener('wheel', handler, { passive: false })
+        return () => el.removeEventListener('wheel', handler)
+      }, [])
+      return h('div', { className: 'dtl-rope-wrap' },
+        h('div', {
+          ref: boxRef,
+          className: 'dtl-rope-drop', 'data-empty': n === 0 ? 1 : 0, tabIndex: -1, role: 'region', 'aria-label': '图片挂绳',
+          'data-tip': '拖图挂绳 · 滚轮翻看 · 单击放大 · 双击复制 · 按住拖远取下',
+          onDragOver: (e) => { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy' } catch { /* ignore */ } },
+          onDrop,
+        },
+          n === 0
+            ? h('div', { className: 'dtl-rope-hintonly' },
+                h('div', null, '拖图到这里挂 · 或点右上角 📋 粘贴剪贴板图片'),
+                h('div', null, '单击放大 · 双击复制 · 按住拖远取下'),
+              )
+            : clips.sort((a, b) => a.z - b.z).map(({ p, x, y, tilt, z }) => h(PhotoClip, {
+                key: p.id, photo: p, x, y, tilt, z,
+                onRemove: () => void rope.remove(p.id),
+                onZoom: () => setZoom({ photo: p }),
+                onCopied: (name) => rope.say(name ? '已复制，可直接粘贴' : '复制失败'),
+              })),
+        ),
+        zoom ? h(RopeLightbox, { photo: zoom.photo, onClose: () => setZoom(null) }) : null,
+      )
+    }
+
+    // 从剪贴板取图片挂绳：优先 clipboard.read()（需读取权限），失败时降级
+    // execCommand('paste')（Electron 宿主可用：聚焦隐藏编辑区接收 paste 事件）。
+    function hangFromClipboard(rope) {
+      const hangBlob = (blob, type) => {
+        if (!blob) return false
+        const fr = new FileReader()
+        fr.onload = () => void rope.addFromDataUrl(String(fr.result || ''), type === 'image/jpeg' ? 'jpg' : type === 'image/webp' ? 'webp' : 'png')
+        fr.readAsDataURL(blob)
+        return true
+      }
+      const readViaApi = async () => {
+        const items = await navigator.clipboard.read()
+        for (const item of items) {
+          const type = (item.types || []).find((t) => /^image\//.test(t))
+          if (type) {
+            const blob = await item.getType(type)
+            if (hangBlob(blob, type)) return 'hung'
+          }
+        }
+        return 'empty'
+      }
+      const execPasteFallback = () => new Promise((resolve) => {
+        const box = document.createElement('div')
+        box.contentEditable = 'true'
+        box.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0'
+        document.body.appendChild(box)
+        let done = false
+        const finish = () => {
+          if (done) return
+          done = true
+          box.removeEventListener('paste', onPaste)
+          box.remove()
+          window.clearTimeout(timer)
+          resolve()
+        }
+        const onPaste = (e) => {
+          done = true
+          const items = (e.clipboardData && e.clipboardData.items) || []
+          let hung = false
+          for (const it of items) {
+            if (/^image\//.test(String(it.type || ''))) {
+              e.preventDefault()
+              hung = hangBlob(it.getAsFile(), it.type)
+              break
+            }
+          }
+          box.removeEventListener('paste', onPaste)
+          window.clearTimeout(timer)
+          box.remove()
+          if (!hung) rope.say('剪贴板里没有图片')
+          resolve()
+        }
+        const timer = window.setTimeout(finish, 800)
+        box.addEventListener('paste', onPaste)
+        box.focus()
+        let ok = false
+        try { ok = document.execCommand('paste') } catch { ok = false }
+        if (!ok) window.setTimeout(finish, 250)
+      })
+      if (navigator.clipboard && navigator.clipboard.read) {
+        return readViaApi().then((r) => {
+          if (r === 'hung' || r === 'empty') return
+          return execPasteFallback()
+        }).catch(() => execPasteFallback())
+      }
+      return execPasteFallback()
+    }
+
+    /* ── tab container used by both overlay and panel (and board cards) ── */
+    function App({ ctx, workspaceId, workspaceTitle, call, compact, drag, onCollapse, onChange }) {
       const state = useSnapshot(ctx, workspaceId, call)
       const { snap, reload } = state
       const [tab, setTab] = React.useState(() => {
@@ -750,9 +1204,22 @@ window.__ModuleLoader__.load({
       })
       const [creating, setCreating] = React.useState(false)
       const [newTitle, setNewTitle] = React.useState('')
-      const onchange = (v) => { if (v) reload() }
+      const onchange = (v, err) => { if (err && onChange) onChange(null, err); if (v) { reload(); if (onChange) onChange(v) } }
       const snapId = React.useRef(0)
       React.useEffect(() => { snapId.current++ }, [snap])
+      // Photo rope state lives here so the head row can show 共 N 张.
+      const rope = usePhotoRope(workspaceId, call)
+      const tips = usePanelTips()
+      // 飘字用 fixed 定位挂最外层：按面板实际位置计算视口坐标。
+      const rootRef = React.useRef(null)
+      const [toastPos, setToastPos] = React.useState(null)
+      React.useLayoutEffect(() => {
+        if (!rope.msg) return
+        const el = rootRef.current
+        if (!el) return
+        const r = el.getBoundingClientRect()
+        setToastPos({ left: Math.round(r.left + r.width / 2), top: Math.round(r.top + 80) })
+      }, [rope.msg])
 
       const createList = () => {
         const t = newTitle.trim() || '新清单'
@@ -761,7 +1228,7 @@ window.__ModuleLoader__.load({
         void call('list.create', { workspaceId, title: t }).then(onchange).catch((err) => onchange(null, err))
       }
       const addNote = () => {
-        const pal = (snap && snap.colors) || ['yellow', 'green', 'blue', 'pink']
+        const pal = (snap && snap.colors) || ['yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan']
         const n = (snap && snap.notes && snap.notes.length) || 0
         const color = pal[n % pal.length]
         void call('note.add', { workspaceId, text: '', color }).then(onchange).catch((err) => onchange(null, err))
@@ -778,7 +1245,7 @@ window.__ModuleLoader__.load({
       }
 
       const headRight = tab === 'notes'
-        ? h('button', { className: 'dtl-iconbtn', onClick: addNote, title: '新建便签', 'aria-label': '新建便签' }, h(Icon, { d: ICON.plus }))
+        ? h('button', { className: 'dtl-iconbtn', onClick: addNote, 'data-tip': '新建便签', 'aria-label': '新建便签' }, h(Icon, { d: ICON.plus }))
         : (creating
             ? h('input', {
                 className: 'dtl-head-input', autoFocus: true, placeholder: '清单名，回车新建', value: newTitle,
@@ -786,27 +1253,84 @@ window.__ModuleLoader__.load({
                 onKeyDown: (e) => { if (e.key === 'Enter') createList(); if (e.key === 'Escape') { setCreating(false); setNewTitle('') } },
                 onBlur: () => { setCreating(false); setNewTitle('') },
               })
-            : h('button', { className: 'dtl-iconbtn', onClick: () => setCreating(true), title: '新建清单', 'aria-label': '新建清单' }, h(Icon, { d: ICON.plus })))
+            : h('button', { className: 'dtl-iconbtn', onClick: () => setCreating(true), 'data-tip': '新建清单', 'aria-label': '新建清单' }, h(Icon, { d: ICON.plus })))
 
-      return h('div', { className: 'dtl-root' },
+      // 吞掉面板区域上的原生拖放：文件/图片拖进面板（含挂绳）一律只挂到
+      // 挂绳，不触发 DSH「拖图进对话框」的原生行为。整个面板根节点高亮。
+      const [panelOver, setPanelOver] = React.useState(false)
+      const overTimer = React.useRef(null)
+      React.useEffect(() => () => { if (overTimer.current) window.clearTimeout(overTimer.current) }, [])
+      const swallowDrop = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (e.type === 'dragover') {
+          if (overTimer.current) { window.clearTimeout(overTimer.current); overTimer.current = null }
+          try { e.dataTransfer.dropEffect = 'copy' } catch { /* ignore */ }
+          setPanelOver(true)
+          return
+        }
+        if (e.type === 'dragleave') {
+          if (overTimer.current) window.clearTimeout(overTimer.current)
+          overTimer.current = window.setTimeout(() => setPanelOver(false), 160)
+          return
+        }
+        // drop
+        setPanelOver(false)
+        // 挂绳已处理过（精确落点 + 高亮反馈）的不重复挂。
+        try { if (e.nativeEvent && e.nativeEvent.__dtlHandled) return } catch { /* ignore */ }
+        try {
+          const dt = e.dataTransfer
+          const files = dt && dt.files ? Array.from(dt.files).filter((f) => /^image\//.test(String(f.type || ''))) : []
+          if (files.length) { void rope.addFiles(files); return }
+          // 拖的是 DOM <img>（如网页里的图）：取 src 挂绳。
+          const html = dt && typeof dt.getData === 'function' ? String(dt.getData('text/html') || '') : ''
+          const m = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i)
+          const src = m && m[1]
+          if (src && /^data:image\//.test(src)) void rope.addFromDataUrl(src)
+          else if (files.length === 0 && !src) rope.say('只支持图片')
+        } catch { /* ignore */ }
+      }
+
+      return h('div', {
+        ref: rootRef,
+        className: 'dtl-root',
+        'data-over': panelOver ? 1 : 0,
+        onDragEnter: swallowDrop,
+        onDragOver: swallowDrop,
+        onDragLeave: swallowDrop,
+        onDrop: swallowDrop,
+        ...tips,
+      },
         h('style', { type: 'text/css' }, STYLE),
+        rope.msg && toastPos ? h('span', { key: rope.msgId, className: 'dtl-rope-msgpill', style: { left: `${toastPos.left}px`, top: `${toastPos.top}px` } }, rope.msg) : null,
+        tips.tipEl,
         h('div', { className: 'dtl-head' },
           h('div', { className: 'dtl-tabs', role: 'tablist', 'aria-label': '待办与便签' },
             h('button', { role: 'tab', 'data-on': tab === 'todo' ? 1 : 0, className: 'dtl-tab', 'aria-selected': tab === 'todo', onClick: () => switchTab('todo') }, '待办'),
             h('button', { role: 'tab', 'data-on': tab === 'notes' ? 1 : 0, className: 'dtl-tab', 'aria-selected': tab === 'notes', onClick: () => switchTab('notes') }, '便签'),
           ),
-          h('div', Object.assign({ className: 'dtl-dragspace', title: '按住拖动面板', role: 'presentation' }, drag || {})),
+          h('div', Object.assign({ className: 'dtl-dragspace', 'data-tip': '按住拖动面板', role: 'presentation' }, drag || {})),
           h('button', {
-            className: 'dtl-iconbtn dtl-gh', 'aria-label': '在浏览器打开 GitHub 项目主页（欢迎 Star ~）',
+            className: 'dtl-iconbtn dtl-gh', 'data-tip': '欢迎 Star ~', 'aria-label': '在浏览器打开 GitHub 项目主页（欢迎 Star ~）',
             onClick: () => openExternal('https://github.com/jesongit/dsh-todolist'),
           },
             h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'currentColor', 'aria-hidden': true },
               h('path', { d: 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z' }),
             ),
           ),
+          h('button', {
+            className: 'dtl-iconbtn', 'data-tip': '粘贴剪贴板图片', 'aria-label': '粘贴剪贴板图片',
+            onClick: () => void hangFromClipboard(rope),
+          },
+            h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+              h('rect', { x: 8, y: 2.5, width: 8, height: 3.5, rx: 1 }),
+              h('path', { d: 'M8 4.5H6.5a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2H16' }),
+              h('path', { d: 'M12 10.5v6M9.5 14l2.5 2.5L14.5 14' }),
+            ),
+          ),
           headRight,
           onCollapse
-            ? h('button', { className: 'dtl-iconbtn', title: '收起', 'aria-label': '收起', onClick: onCollapse },
+            ? h('button', { className: 'dtl-iconbtn', 'data-tip': '收起', 'aria-label': '收起', onClick: onCollapse },
                 h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
                   h('path', { d: 'M6 15l6-6 6 6' }),
                 ),
@@ -814,6 +1338,7 @@ window.__ModuleLoader__.load({
             : null,
         ),
         h('div', { className: 'dtl-body' },
+          workspaceId ? h(PhotoRope, { rope }) : null,
           state.error ? h('div', { className: 'dtl-empty', role: 'alert' }, '加载失败：', String(state.error)) : null,
           tab === 'todo'
             ? h(TodoTab, { workspaceId, snap, call, onchange })
@@ -832,14 +1357,14 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /* ── sticky note: right-click menu (copy/color/delete) + smart copy chips ── */
+    /* ── sticky note: icon-row tools (color palette/copy/delete) + smart copy chips ── */
     function NoteCard({ note, call, workspaceId, colors, onChange, pinned, onTogglePin }) {
-      const [menu, setMenu] = React.useState(null) // {x, y}
+      const [palette, setPalette] = React.useState(false)
       const [copied, setCopied] = React.useState(null)
       const [editing, setEditing] = React.useState(false)
       const [confirmDel, setConfirmDel] = React.useState(false)
-      const colorLabel = { yellow: '黄', green: '绿', blue: '蓝', pink: '粉' }
-      const close = () => setMenu(null)
+      const colorLabel = { yellow: '黄', green: '绿', blue: '蓝', pink: '粉', orange: '橙', purple: '紫', cyan: '青' }
+      const close = () => setPalette(false)
       // Delete needs two clicks (like todo lists); auto-cancels after a moment.
       React.useEffect(() => {
         if (!confirmDel) return () => {}
@@ -889,21 +1414,18 @@ window.__ModuleLoader__.load({
         return () => { ro.disconnect(); cancelAnimationFrame(raf) }
       }, [autosize, editing])
       React.useEffect(() => {
-        if (!menu) return () => {}
-        const onDown = (e) => { if (!(e.target && e.target.closest && e.target.closest('[data-dtl-ctx]'))) close() }
+        if (!palette) return () => {}
+        // Clicks on the color button or the palette itself are excluded so the
+        // button's own toggle click can still close it; anything else collapses.
+        const onDown = (e) => { if (!(e.target && e.target.closest && e.target.closest('.dtl-note-color,.dtl-note-palette'))) close() }
         const onKey = (e) => { if (e.key === 'Escape') close() }
-        const onScroll = () => close()
         document.addEventListener('pointerdown', onDown, true)
         document.addEventListener('keydown', onKey, true)
-        window.addEventListener('scroll', onScroll, true)
-        window.addEventListener('resize', onScroll)
         return () => {
           document.removeEventListener('pointerdown', onDown, true)
           document.removeEventListener('keydown', onKey, true)
-          window.removeEventListener('scroll', onScroll, true)
-          window.removeEventListener('resize', onScroll)
         }
-      }, [menu])
+      }, [palette])
       const showCopied = (k) => { setCopied(k); window.setTimeout(() => setCopied((c) => (c === k ? null : c)), 1200) }
       const copyValue = (value, k) => { copyText(value).then(() => showCopied(k)).catch(() => {}) }
       // Link chip: single click copies, double click opens in the browser. A short
@@ -942,48 +1464,50 @@ window.__ModuleLoader__.load({
         if (t !== note.text) void call('note.update', { workspaceId, noteId: note.id, text: t }).then(onChange).catch((err) => onChange(null, err))
       }
       return h('div', {
-        className: 'dtl-note', 'data-color': note.color, 'data-raw': raw ? 1 : 0, 'data-pinned': pinned ? 1 : 0, title: '点击编辑，右键可改颜色',
-        onContextMenu: (e) => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) },
+        className: 'dtl-note', 'data-color': note.color, 'data-raw': raw ? 1 : 0, 'data-pinned': pinned ? 1 : 0, 'data-tip': '点击编辑',
       },
-        h('button', {
-          className: 'dtl-pin', type: 'button', 'data-on': pinned ? 1 : 0,
-          title: pinned ? '取消置顶' : '置顶便签', 'aria-label': pinned ? '取消置顶' : '置顶便签', 'aria-pressed': pinned ? 'true' : 'false',
-          onClick: (e) => { e.stopPropagation(); if (onTogglePin) onTogglePin() },
-        }, h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true },
-          h('path', { d: 'M16 9V4h1V2H7v2h1v5c0 1.66-1.34 3-3 3v2h5.97v7.01l1 1 1-1V14H19v-2c-1.66 0-3-1.34-3-3z' }),
-        )),
-        h('button', {
-          className: 'dtl-note-del', type: 'button', 'data-danger': confirmDel ? 1 : 0,
-          title: confirmDel ? '再次点击确认删除便签' : '删除便签', 'aria-label': confirmDel ? '确认删除便签' : '删除便签',
-          onClick: (e) => { e.stopPropagation(); if (confirmDel) remove(); else setConfirmDel(true) },
-        }, h(Icon, { d: confirmDel ? ICON.check : ICON.x, size: 14 })),
-        h('button', {
-          className: 'dtl-note-copy', type: 'button', title: '复制全部内容', 'aria-label': '复制全部内容',
-          onClick: (e) => { e.stopPropagation(); copyNoteAll() },
-          onDoubleClick: (e) => e.stopPropagation(),
-        }, h('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
-          h('rect', { x: 9, y: 9, width: 11, height: 11, rx: 2 }),
-          h('path', { d: 'M5 15V5a2 2 0 0 1 2-2h8' }),
-        )),
+        h('div', { className: 'dtl-note-tools' },
+          h('button', {
+            className: 'dtl-note-color', type: 'button', 'data-on': palette ? 1 : 0,
+            'data-tip': '修改颜色', 'aria-label': '修改颜色', 'aria-haspopup': 'menu', 'aria-expanded': palette ? 'true' : 'false',
+            onClick: (e) => { e.stopPropagation(); setPalette((p) => !p) },
+          }, h(Icon, { d: 'M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z', size: 12 })),
+          palette
+            ? h('div', { className: 'dtl-note-palette', role: 'menu', 'aria-label': '便签颜色' },
+                colors.map((c) => h('button', { key: c, type: 'button', className: 'dtl-swatch', 'data-c': c, 'data-on': note.color === c ? 1 : 0, title: colorLabel[c] || c, 'aria-label': `设为${colorLabel[c] || c}色`, onClick: (e) => { e.stopPropagation(); setColor(c) } })),
+              )
+            : null,
+          h('span', { className: 'dtl-note-tools-spacer', 'aria-hidden': true }),
+          h('button', {
+            className: 'dtl-pin', type: 'button', 'data-on': pinned ? 1 : 0,
+            'data-tip': pinned ? '取消置顶' : '置顶便签', 'aria-label': pinned ? '取消置顶' : '置顶便签', 'aria-pressed': pinned ? 'true' : 'false',
+            onClick: (e) => { e.stopPropagation(); if (onTogglePin) onTogglePin() },
+          }, h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true },
+            h('path', { d: 'M16 9V4h1V2H7v2h1v5c0 1.66-1.34 3-3 3v2h5.97v7.01l1 1 1-1V14H19v-2c-1.66 0-3-1.34-3-3z' }),
+          )),
+          h('button', {
+            className: 'dtl-note-copy', type: 'button', 'data-tip': '复制全部内容', 'aria-label': '复制全部内容',
+            onClick: (e) => { e.stopPropagation(); copyNoteAll() },
+            onDoubleClick: (e) => e.stopPropagation(),
+          }, h('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+            h('rect', { x: 9, y: 9, width: 11, height: 11, rx: 2 }),
+            h('path', { d: 'M5 15V5a2 2 0 0 1 2-2h8' }),
+          )),
+          h('button', {
+            className: 'dtl-note-del', type: 'button', 'data-danger': confirmDel ? 1 : 0,
+            'data-tip': confirmDel ? '再次点击确认删除便签' : '删除便签', 'aria-label': confirmDel ? '确认删除便签' : '删除便签',
+            onClick: (e) => { e.stopPropagation(); if (confirmDel) remove(); else setConfirmDel(true) },
+          }, h(Icon, { d: confirmDel ? ICON.check : ICON.x, size: 12 })),
+        ),
         editing
           ? h('textarea', { ref: taRef, rows: 1, defaultValue: note.text, autoFocus: true, 'aria-label': '便签内容', className: 'dtl-note-ta', onInput: autosize, onBlur: saveEdit, onKeyDown: (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit() } })
           : renderSegs(),
-        menu
-          ? h('div', {
-              className: 'dtl-ctxmenu', 'data-dtl-ctx': 1,
-              style: { left: `${Math.max(8, Math.min(menu.x, (window.innerWidth || 9999) - 190))}px`, top: `${Math.max(8, Math.min(menu.y, (window.innerHeight || 9999) - 160))}px` },
-              onContextMenu: (e) => e.preventDefault(),
-            },
-              h('div', { className: 'dtl-ctx-title' }, '便签颜色'),
-              h('div', { className: 'dtl-ctx-colors' }, colors.map((c) => h('button', { key: c, className: 'dtl-swatch', 'data-c': c, 'data-on': note.color === c ? 1 : 0, title: colorLabel[c] || c, 'aria-label': `设为${colorLabel[c] || c}色`, onClick: () => setColor(c) }))),
-            )
-          : null,
       )
     }
 
     function NotesTab({ workspaceId, snap, call, onchange }) {
       const notes = (snap && snap.notes) || []
-      const colors = (snap && snap.colors) || ['yellow', 'green', 'blue', 'pink']
+      const colors = (snap && snap.colors) || ['yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan']
       const [pins, togglePin] = useNotePins(workspaceId)
       const ordered = orderNotes(notes, pins)
       return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
@@ -1009,29 +1533,12 @@ window.__ModuleLoader__.load({
       return { ...state, reload: load }
     }
 
-    function WorkspaceCard({ group, call, onchange, drag }) {
+    function WorkspaceCard({ group, ctx, call, onchange, drag }) {
       const [open, setOpen] = usePersistentToggle('dsh-todolist-ws-expanded', group.workspaceId, true)
-      const [creating, setCreating] = React.useState(false)
-      const [title, setTitle] = React.useState('')
       const lists = group.lists || []
       const notes = group.notes || []
-      const colors = group.colors || ['yellow', 'green', 'blue', 'pink']
-      const [pins, togglePin] = useNotePins(group.workspaceId)
-      const orderedNotes = orderNotes(notes, pins)
-      const [listPins, toggleListPin] = useListPins(group.workspaceId)
-      const orderedLists = orderLists(lists, listPins)
       const itemCount = lists.reduce((n, l) => n + (l.items || []).length, 0)
-      const commitList = () => {
-        const t = title.trim()
-        setCreating(false)
-        setTitle('')
-        if (!t) return
-        void call('list.create', { workspaceId: group.workspaceId, title: t }).then(onchange).catch((err) => onchange(null, err))
-      }
-      const addNote = () => {
-        const color = colors[notes.length % colors.length]
-        void call('note.add', { workspaceId: group.workspaceId, text: '', color }).then(onchange).catch((err) => onchange(null, err))
-      }
+      const photoCount = (group.photos || []).length
       return h('section', {
         className: 'dtl-wscard', 'data-ws': group.workspaceId,
         'data-dragging': drag && drag.id === group.workspaceId ? 1 : 0,
@@ -1055,7 +1562,7 @@ window.__ModuleLoader__.load({
           h('div', {
             className: 'dtl-wshead',
             draggable: drag ? true : undefined,
-            title: drag ? '按住拖动调整卡片顺序，点击展开/收起' : undefined,
+            'data-tip': drag ? '按住拖动调整卡片顺序，点击展开/收起' : undefined,
             onDragStart: (e) => {
               if (!drag) return
               drag.onDragStart(group.workspaceId)
@@ -1067,27 +1574,11 @@ window.__ModuleLoader__.load({
             h('span', { 'aria-hidden': true, style: { color: 'var(--dtl-fg2)', fontSize: 14, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' } }, '›'),
           ),
           h('div', { className: 'dtl-wssub' },
-            h('span', { className: 'dtl-wsmeta' }, `${lists.length} 清单 · ${notes.length} 便签 · ${itemCount} 项`),
-            h('span', { style: { flex: 1 } }),
-            creating
-              ? h('input', {
-                  className: 'dtl-head-input', autoFocus: true, placeholder: '清单名，回车新建', value: title,
-                  onChange: (e) => setTitle(e.target.value),
-                  onKeyDown: (e) => { if (e.key === 'Enter') commitList(); if (e.key === 'Escape') { setCreating(false); setTitle('') } },
-                  onBlur: () => { if (!title.trim()) { setCreating(false); setTitle('') } },
-                })
-              : h('button', { className: 'dtl-head-new', title: '在本工作区新建清单', onClick: () => setCreating(true) }, '＋清单'),
-            h('button', { className: 'dtl-head-new', title: '在本工作区新建便签', onClick: addNote }, '＋便签'),
+            h('span', { className: 'dtl-wsmeta' }, `${lists.length} 清单 · ${notes.length} 便签 · ${itemCount} 项 · ${photoCount} 图片`),
           ),
         ),
         open
-          ? h('div', { className: 'dtl-wsbody' },
-              lists.length === 0 && notes.length === 0
-                ? h('div', { className: 'dtl-wsempty' }, '该工作区暂无任务')
-                : null,
-              orderedLists.map((list, i) => h(ListCard, { key: list.id, list, call, workspaceId: group.workspaceId, onChange: onchange, index: i, pinned: listPins.includes(list.id), onTogglePin: () => toggleListPin(list.id) })),
-              orderedNotes.map((note) => h(NoteCard, { key: note.id, note, call, workspaceId: group.workspaceId, colors, onChange: onchange, pinned: pins.includes(note.id), onTogglePin: () => togglePin(note.id) })),
-            )
+          ? h(App, { ctx, workspaceId: group.workspaceId, workspaceTitle: group.title, call, onChange: onchange, onCollapse: () => setOpen(false) })
           : null,
       )
     }
@@ -1109,6 +1600,7 @@ window.__ModuleLoader__.load({
 
     function BoardMain(props) {
       const call = ctxRef.call
+      const ctx = props && props.ctx
       const board = useBoard(call)
       const groups = board.groups || []
       const reload = (v) => { if (v) board.reload() }
@@ -1141,7 +1633,15 @@ window.__ModuleLoader__.load({
         acc.items += (g.lists || []).reduce((n, l) => n + (l.items || []).length, 0)
         return acc
       }, { ws: 0, lists: 0, items: 0 })
-      return h(DtlBoundary, null, h('div', { style: { height: '100%', boxSizing: 'border-box', overflow: 'auto' } },
+      // 看板背景区域吞掉原生拖放（卡片内部由各自的 App 面板接管挂绳）。
+      const boardSwallow = (e) => {
+        const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : []
+        if (!types.includes('Files')) return
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      const tips = usePanelTips()
+      return h(DtlBoundary, null, h('div', { style: { height: '100%', boxSizing: 'border-box', overflow: 'auto' }, onDragOver: boardSwallow, onDrop: boardSwallow, ...tips },
         h('div', { className: 'dtl-root dtl-boardroot' },
           h('style', { type: 'text/css' }, STYLE),
           h('div', { className: 'dtl-board' },
@@ -1152,9 +1652,10 @@ window.__ModuleLoader__.load({
             board.error ? h('div', { className: 'dtl-empty', role: 'alert' }, '加载失败：', board.error) : null,
             ordered.length === 0
               ? h('div', { className: 'dtl-empty' }, '还没有任何任务，从页面右上角的浮窗开始创建。')
-              : h('div', { className: 'dtl-boardgrid' }, ordered.map((g) => h(WorkspaceCard, { key: g.workspaceId, group: g, call, onchange: reload, drag }))),
+              : h('div', { className: 'dtl-boardgrid' }, ordered.map((g) => h(WorkspaceCard, { key: g.workspaceId, group: g, ctx, call, onchange: reload, drag }))),
           ),
         ),
+        tips.tipEl,
       ))
     }
 
@@ -1162,6 +1663,7 @@ window.__ModuleLoader__.load({
     const PANEL_W = 330
     const PANEL_MIN_H = 120
     const PANEL_GAP = 16 // breathing room from the conversation area's left/right/top edges
+    // (The rope is an in-panel element now; no overlay geometry constants.)
     function FloatingPanel(ctxRef, call) {
       return function FloatingPanelInner(props) {
         const ctx = ctxRef.ctx
@@ -1191,7 +1693,7 @@ window.__ModuleLoader__.load({
             if (!alive) return
             let pending = 0, done = 0
             for (const l of (snap && snap.lists) || []) for (const it of (l.items || [])) { if (it.done) done++; else pending++ }
-            setCounts({ pending, done, notes: ((snap && snap.notes) || []).length })
+            setCounts({ pending, done, notes: ((snap && snap.notes) || []).length, photos: ((snap && snap.photos) || []).length })
           }).catch(() => { if (alive) setCounts(null) })
           return () => { alive = false }
         }, [open, call, ws.workspaceId])
@@ -1289,24 +1791,28 @@ window.__ModuleLoader__.load({
           `${n} ${label}`,
         )
         const drag = { onPointerDown: onGripDown, onPointerMove: onGripMove, onPointerUp: onGripUp, onPointerCancel: onGripUp, 'data-dragging': dragging ? 1 : 0 }
+        const tips = usePanelTips()
         return h(DtlBoundary, null,
           h(
             'div',
-            { style: { pointerEvents: 'auto' } },
+            { style: { pointerEvents: 'auto' }, ...tips },
+            h('style', { type: 'text/css' }, STYLE),
             open
               ? h('div', { className: 'dtl-panel', role: 'complementary', 'aria-label': '待办清单与便签', style: { left: `${effPos.x}px`, top: `${effPos.y}px`, width: `${effW}px`, maxWidth: '100vw', maxHeight: `${effMaxH}px`, zIndex: 1000 } },
                   ws.workspaceId
                     ? h(App, { ctx, workspaceId: ws.workspaceId, workspaceTitle: ws.title, call, compact: true, drag, onCollapse: () => setOpen(false) })
-                    : h('div', { className: 'dtl-root' }, h('style', { type: 'text/css' }, STYLE), h('div', { className: 'dtl-empty' }, '无可用工作区')),
+                    : h('div', { className: 'dtl-root' }, h('div', { className: 'dtl-empty' }, '无可用工作区')),
                 )
               : h(
                   'button',
-                  { title: '展开待办清单', 'aria-label': '展开待办清单', onClick: () => setOpen(true), style: { position: 'fixed', left: `${effPos.x}px`, top: `${effPos.y}px`, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 12, cursor: 'pointer', boxShadow: '0 6px 18px rgba(0,0,0,.16)', whiteSpace: 'nowrap' } },
+                  { 'data-tip': '展开待办清单', 'aria-label': '展开待办清单', onClick: () => setOpen(true), style: { position: 'fixed', left: `${effPos.x}px`, top: `${effPos.y}px`, zIndex: 1000, display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 12, cursor: 'pointer', boxShadow: '0 6px 18px rgba(0,0,0,.16)', whiteSpace: 'nowrap' } },
                   stat('#f97316', counts ? counts.pending : '–', '待办'),
                   stat('#22c55e', counts ? counts.done : '–', '完成'),
                   stat('#8b5cf6', counts ? counts.notes : '–', '便签'),
+                  stat('#e11d48', counts ? counts.photos : '–', '图片'),
                 ),
           ),
+          tips.tipEl,
         )
       }
     }

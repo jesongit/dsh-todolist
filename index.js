@@ -10,6 +10,7 @@
  *   tables:
  *     lists: { [listId]: { id, title, items: [{ id, text, done, createdAt }], createdAt } }
  *     notes: { [noteId]:   { id, text, color, createdAt, updatedAt } }
+ *     photos:{ [photoId]:  { id, name, dataUrl, createdAt } }   ← 挂绳图片（缩略图 data URL）
  */
 
 import { join, dirname } from 'node:path'
@@ -20,8 +21,14 @@ export const inject = ['webServer', 'connection', 'workspaceRegistry']
 
 const CHANNEL = '/dsh-todolist'
 const MAX_BODY = 2 * 1024 * 1024
+const PHOTO_MAX_BODY = 12 * 1024 * 1024 // photo uploads carry data URLs
 const ENDPOINT_SEGMENT = /^[A-Za-z0-9_$.-]+$/
-const NOTE_COLORS = ['yellow', 'green', 'blue', 'pink']
+const NOTE_COLORS = ['yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan']
+const PHOTO_MAX = 200          // per workspace
+const PHOTO_DATA_MAX = 8 * 1024 * 1024 // ~8 MB shrunk data URL ceiling
+const PHOTO_NAME_RE = /^图\d{1,4}$/
+const PHOTO_EXT_RE = /^data:image\/(png|jpeg|webp|gif|bmp);base64,[A-Za-z0-9+/=\s]+$/
+const PHOTO_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/bmp': 'bmp' }
 
 function defaultStore() {
   const home = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '.', '.dsh')
@@ -35,8 +42,8 @@ function defaultStore() {
 class Store {
   constructor(file) {
     this.file = file
-    /** @type {{lists: Record<string,any>, notes: Record<string,any>}} */
-    this.data = { lists: {}, notes: {} }
+    /** @type {{lists: Record<string,any>, notes: Record<string,any>, photos: Record<string,any>}} */
+    this.data = { lists: {}, notes: {}, photos: {} }
     this.loaded = false
   }
   async load() {
@@ -47,9 +54,10 @@ class Store {
       const parsed = JSON.parse(text)
       this.data.lists = parsed.lists && typeof parsed.lists === 'object' ? parsed.lists : {}
       this.data.notes = parsed.notes && typeof parsed.notes === 'object' ? parsed.notes : {}
+      this.data.photos = parsed.photos && typeof parsed.photos === 'object' ? parsed.photos : {}
     } catch {
       // Missing or corrupt file → start empty.
-      this.data = { lists: {}, notes: {} }
+      this.data = { lists: {}, notes: {}, photos: {} }
     }
   }
   async flush() {
@@ -166,9 +174,16 @@ export function apply(ctx, config = {}) {
       const note = store.data.notes[key]
       notes.push({ ...note, id: key.slice(ws.length + 1) })
     }
+    const photos = []
+    for (const key of Object.keys(store.data.photos || {})) {
+      if (!key.startsWith(`${ws}/`)) continue
+      const photo = store.data.photos[key]
+      photos.push({ ...photo, id: key.slice(ws.length + 1) })
+    }
     lists.sort((a, b) => a.createdAt - b.createdAt)
     notes.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-    return { lists, notes, colors }
+    photos.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    return { lists, notes, photos, colors }
   }
 
   /**
@@ -377,6 +392,41 @@ export function apply(ctx, config = {}) {
         await store.flush()
         return ok(snapshotFor(ws))
       }
+
+      /* ── 挂绳图片（缩略图 + 自动命名 图1、图2 …） ── */
+      case 'photos.list': {
+        const ws = requireWorkspace(payload)
+        return { photos: snapshotFor(ws).photos }
+      }
+      case 'photo.add': {
+        const ws = requireWorkspace(payload)
+        const dataUrl = requireText(payload, 'dataUrl', PHOTO_DATA_MAX)
+        const m = PHOTO_EXT_RE.exec(dataUrl)
+        if (!m) throw Object.assign(new Error('只支持常见图片格式的 data URL'), { code: 'INVALID_INPUT' })
+        const table = store.data.photos || (store.data.photos = {})
+        const prefix = `${ws}/`
+        const existing = Object.keys(table).filter((k) => k.startsWith(prefix))
+        if (existing.length >= PHOTO_MAX) {
+          throw Object.assign(new Error(`每块挂绳最多挂 ${PHOTO_MAX} 张图片`), { code: 'TOO_MANY_PHOTOS' })
+        }
+        // Name: the smallest free 图N, so deletions don't create gaps forever.
+        const used = new Set(existing.map((k) => table[k] && table[k].name).filter((n) => PHOTO_NAME_RE.test(String(n || ''))).map((n) => Number(String(n).slice(1))))
+        let num = 1
+        while (used.has(num)) num++
+        const name = `图${num}`
+        const id = uid()
+        table[`${ws}/${id}`] = { id, name, dataUrl, createdAt: Date.now() }
+        await store.flush()
+        return ok({ addedId: id, addedName: name, photos: snapshotFor(ws).photos })
+      }
+      case 'photo.remove': {
+        const ws = requireWorkspace(payload)
+        const pid = requireId(payload, 'photoId')
+        const table = store.data.photos || (store.data.photos = {})
+        delete table[`${ws}/${pid}`]
+        await store.flush()
+        return ok({ photos: snapshotFor(ws).photos })
+      }
       default:
         throw Object.assign(new Error('unknown endpoint'), { code: 'NOT_FOUND' })
     }
@@ -385,6 +435,7 @@ export function apply(ctx, config = {}) {
   const disposeRoute = registerRoutes(ctx, {
     channel: CHANNEL,
     maxBody: MAX_BODY,
+    photoMaxBody: PHOTO_MAX_BODY,
     handler: dispatch,
     log: diag,
   })
@@ -406,9 +457,10 @@ function registerRoutes(ctx, opts) {
     return () => {}
   }
 
-  const readBoundedBody = async (req) => {
+  const readBoundedBody = async (req, cap) => {
+    const limit = cap || opts.maxBody
     const declared = req.headers && req.headers['content-length']
-    if (typeof declared === 'string' && Number(declared) > opts.maxBody) {
+    if (typeof declared === 'string' && Number(declared) > limit) {
       req.resume && req.resume()
       return null
     }
@@ -416,7 +468,7 @@ function registerRoutes(ctx, opts) {
     let received = 0
     for await (const chunk of req) {
       received += chunk.byteLength
-      if (received > opts.maxBody) {
+      if (received > limit) {
         req.resume && req.resume()
         return null
       }
@@ -472,7 +524,9 @@ function registerRoutes(ctx, opts) {
       let method = ''
       let payload
       try {
-        const text = await readBoundedBody(req)
+        // Read with the larger photo cap, then enforce the tighter cap for
+        // every endpoint except photo.add (which carries a shrunk data URL).
+        const text = await readBoundedBody(req, opts.photoMaxBody)
         if (text === null) {
           res.statusCode = 413
           res.end()
@@ -487,6 +541,11 @@ function registerRoutes(ctx, opts) {
         rpcId = body.rpcId
         method = body.method
         payload = body.payload
+        if (method !== 'photo.add' && text.length > opts.maxBody) {
+          res.statusCode = 413
+          res.end()
+          return
+        }
       } catch {
         res.statusCode = 400
         res.end('body is not JSON')
