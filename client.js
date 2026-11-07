@@ -635,20 +635,16 @@ window.__ModuleLoader__.load({
       const [title, setTitle] = React.useState('')
       const [saving, setSaving] = React.useState(false)
       const [error, setError] = React.useState('')
-      const clickTimer = React.useRef(null)
       const active = React.useRef(false)
       const pending = React.useRef(false)
       const inputRef = React.useRef(null)
       const buttonRef = React.useRef(null)
       const restoreFocus = React.useRef(false)
-      const clearClick = () => { clearTimeout(clickTimer.current); clickTimer.current = null }
-      React.useEffect(() => () => clearTimeout(clickTimer.current), [])
       React.useEffect(() => {
         if (editing) { inputRef.current?.focus(); inputRef.current?.select() }
         else if (restoreFocus.current) { restoreFocus.current = false; buttonRef.current?.focus() }
       }, [editing])
       const start = () => {
-        clearClick()
         active.current = true
         setTitle(list.title || '')
         setError('')
@@ -675,7 +671,10 @@ window.__ModuleLoader__.load({
           setSaving(false)
         }
       }
-      return h('div', { className: 'dtl-listtitle', onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() },
+      // 单击展开/收起由外层标题栏（.dtl-listhead）统一处理；双击进入重命名。
+      // 双击会先触发一次单击切换，再进入编辑——视觉上等价于"停在原状态进入
+      // 重命名"，无需拦截 click，快速连点也不会被吞。
+      return h('div', { className: 'dtl-listtitle', onDoubleClick: (e) => e.stopPropagation() },
         editing
           ? h('input', {
               ref: inputRef, className: 'dtl-listtitle-input', value: title, maxLength: 500,
@@ -695,11 +694,6 @@ window.__ModuleLoader__.load({
           : h('button', {
               ref: buttonRef, type: 'button', className: 'dtl-listtitle-btn',
               'data-tip': '单击展开/收起，双击重命名（键盘 F2）', 'aria-expanded': expanded,
-              onClick: (e) => {
-                clearClick()
-                if (e.detail === 0) onToggle()
-                else if (e.detail === 1) clickTimer.current = setTimeout(onToggle, 300)
-              },
               onDoubleClick: start,
               onKeyDown: (e) => { if (e.key === 'F2') { e.preventDefault(); e.stopPropagation(); start() } },
             }, list.title || '未命名清单', h('span', { className: 'dtl-count' }, ` ${list.items.filter((i) => i.done).length}/${list.items.length}`)),
